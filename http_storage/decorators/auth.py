@@ -6,6 +6,11 @@ from ..mongo_client import client
 
 
 def bearer_required(f):
+    """
+    Requires a valid "Authorization: Bearer xxxxx..." header.
+    :param f: The function to invoke.
+    :return: The decorated function.
+    """
 
     def wrapper(*args, **kwargs):
         # Get the auth settings.
@@ -25,4 +30,10 @@ def bearer_required(f):
         except ValueError:
             return make_response(jsonify({'code': 'authorization:syntax-error'}), 400)
         # Check the token.
-        client[auth_db][auth_table].find_one({'_id': ObjectId(token), 'valid_until': {"$gte": datetime.datetime.now()}})
+        token = client[auth_db][auth_table].find_one({'_id': ObjectId(token),
+                                                      'valid_until': {"$not": {"$lt": datetime.datetime.now()}}})
+        if not token:
+            return make_response(jsonify({'code': 'authorization:not-found'}), 401)
+        # If the validation passed, then we invoke the decorated function.
+        return f(*args, **kwargs)
+    return wrapper

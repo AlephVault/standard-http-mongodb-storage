@@ -212,8 +212,21 @@ class StorageApp(Flask):
             # This is the function that will run the logic.
             @functools.wraps(f)
             def wrapped(*args, **kwargs):
-                # TODO implement all the checks.
-                return f(*args, **kwargs)
+                # First, we extract the JSON body.
+                try:
+                    if not request.is_json:
+                        pass
+                    data = request.json
+                except Exception as e:
+                    return make_response(jsonify({'code': 'format:unexpected'}), 400)
+
+                # Then, we validate the JSON body against the
+                # required schema, and invoke the decorated
+                # function with the normalized valid object.
+                if validator.validate(data):
+                    return f(validator.document, *args, **kwargs)
+                else:
+                    return make_response(jsonify({'code': 'schema:invalid', 'errors': validator.errors}), 400)
             return wrapped
 
         self._schema_decorators[schema_id] = wrapper

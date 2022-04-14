@@ -53,7 +53,7 @@ class MongoDBEnhancedValidator(Validator):
         :return: The coerced date.
         """
 
-        return datetime.strptime(_DATE_FORMAT, value).date()
+        return datetime.strptime(value, _DATE_FORMAT).date()
 
     def _normalize_coerce_str2datetime(self, value):
         """
@@ -64,7 +64,7 @@ class MongoDBEnhancedValidator(Validator):
 
         for format in _DATETIME_FORMATS:
             try:
-                return datetime.strptime(format, value)
+                return datetime.strptime(value, format)
             except ValueError:
                 continue
         raise ValueError(f"time data '{value}' does not match any of the available formats")
@@ -82,7 +82,8 @@ class MongoDBEnhancedValidator(Validator):
         # Circular dependencies are ignored - they are already treated.
         if tracked is None:
             tracked = set()
-        if schema in tracked:
+        schema_id = id(schema)
+        if schema_id in tracked:
             return
 
         if 'coerce' not in schema:
@@ -95,11 +96,11 @@ class MongoDBEnhancedValidator(Validator):
                 schema['coerce'] = 'str2datetime'
         # We iterate over all the existing dictionaries to repeat this pattern.
         # For this we also track the current schema, to avoid circular dependencies.
-        tracked.add(schema)
-        for sub_schema in schema:
+        tracked.add(schema_id)
+        for sub_schema in schema.values():
             if isinstance(sub_schema, dict):
                 cls.apply_default_coercers(sub_schema, tracked)
-        tracked.remove(schema)
+        tracked.remove(schema_id)
 
 
 class StorageApp(Flask):

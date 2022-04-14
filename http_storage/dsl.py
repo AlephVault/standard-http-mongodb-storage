@@ -80,3 +80,8 @@ class WeakResource(NamedTuple):
     allow_patch: bool
     allow_replace: bool
     resources: List[Union['WeakResource']]
+
+
+# TODO Incomplete: Define callback formats for the methods, so the user can run their own
+# TODO logic if the first one has to be overridden totally or partially, or conditioned
+# TODO in some way (also: complemented in some way).

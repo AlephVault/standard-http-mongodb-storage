@@ -1,5 +1,4 @@
 import datetime
-
 from bson import ObjectId
 from flask import current_app, request, jsonify, make_response
 from ..mongo_client import client

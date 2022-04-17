@@ -1,13 +1,11 @@
 import functools
-import os
 import typing as t
 from datetime import date, datetime
-from urllib.parse import quote_plus
 from bson import ObjectId
 from cerberus import Validator, TypeDefinition
-from pymongo import MongoClient
 from flask import Flask, current_app as app, make_response, request
 from flask.json import JSONEncoder, jsonify
+from .engine.client import CLIENT
 
 
 class ImproperlyConfiguredError(Exception):
@@ -23,13 +21,6 @@ _DATETIME_FORMATS = [
     "%Y-%m-%dT%H:%M:%S",
 ]
 _DATE_FORMAT = "%Y-%m-%d"
-
-
-USER = os.environ['MONGODB_USER']
-PASSWORD = os.environ['MONGODB_PASSWORD']
-HOST = os.environ.get('MONGODB_HOST', 'localhost')
-PORT = os.environ.get('MONGODB_PORT', '27017')
-client = MongoClient("mongodb://%s:%s@%s:%s" % (quote_plus(USER), quote_plus(PASSWORD), HOST, PORT))
 
 
 class MongoDBEnhancedEncoder(JSONEncoder):
@@ -181,7 +172,7 @@ class StorageApp(Flask):
             except ValueError:
                 return make_response(jsonify({'code': 'authorization:syntax-error'}), 400)
             # Check the token.
-            token = client[auth_db][auth_table].find_one({'_id': ObjectId(token),
+            token = CLIENT[auth_db][auth_table].find_one({'_id': ObjectId(token),
                                                           'valid_until': {"$not": {"$lt": datetime.now()}}})
             if not token:
                 return make_response(jsonify({'code': 'authorization:not-found'}), 401)

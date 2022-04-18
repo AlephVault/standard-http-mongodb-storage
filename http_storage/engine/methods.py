@@ -7,6 +7,7 @@ from pymongo.collection import Collection
 
 MAX_RESULTS = max(1, int(os.getenv('MAX_RESULTS', '20')))
 _NOT_FOUND = object()
+_DELETE = object()
 
 
 class Cursor(NamedTuple):
@@ -94,8 +95,16 @@ def _make_setter(collection: Collection, document: Mapping[str, Any], parent: Ma
     :return: The setter.
     """
 
-    def _setter(replacement: Mapping[Union[str, int], Any]):
-        parent[subscript] = replacement
+    def _setter(replacement: Union[object, Mapping[Union[str, int], Any]]):
+        if replacement is not _DELETE:
+            parent[subscript] = replacement
+        elif isinstance(parent, dict):
+            parent.pop(subscript, None)
+        elif isinstance(parent, list):
+            try:
+                parent.pop(subscript)
+            except:
+                pass
         collection.replace_one({"_id": document["_id"]}, document)
 
     return _setter
@@ -215,7 +224,7 @@ def list_item_get(collection: Collection, object_id: ObjectId, filter: Optional[
         return part, True
 
 
-def list_item_put(collection: Collection, object_id: ObjectId, replacement: Mapping[str, Any],
+def list_item_put(collection: Collection, object_id: ObjectId, replacement: Union[object, Mapping[str, Any]],
                   filter: Optional[dict] = None, path: Optional[List[Optional[Union[str, int]]]] = None):
     """
     Replaces a particular object from the list. It does not do anything if the element is not found.
@@ -283,5 +292,39 @@ def list_item_patch(collection: Collection, object_id: ObjectId, patch: Mapping[
         if not isinstance(part, dict):
             part = {}
         part.update(set_directive)
+        # The update was successful.
+        return True
+
+
+def list_item_delete(collection: Collection, object_id: ObjectId, filter: Optional[dict] = None,
+                     path: Optional[List[Optional[Union[str, int]]]] = None):
+    """
+    deleted a particular object from the list. It does not do anything if the element is not found.
+    :param collection: The collection to get a document from.
+    :param object_id: The particular _id to lookup. It will be added to the optional filter, if any.
+    :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will be
+      either a string or an integer to apply successive subscripts (the first entry must be a
+      string or (None, False) will be returned).
+    :return: A boolean telling whether the delete could be done successfully.
+    """
+
+    filter = {**filter, '_id': object_id}
+    if not path:
+        operation = collection.delete_one(filter=filter)
+        return operation.deleted_count
+    else:
+        element = collection.find_one(filter=filter)
+        # If the element is None, return (None, False).
+        if element is None:
+            return False
+        # Traverse and get everything.
+        result, found = _document_traverse(collection, element, path, None)
+        if not found:
+            return False
+        # Get the result and delete. Only the $set directive is considered and
+        # only the first-level fields (i.e. not using ".") will be considered.
+        _, setter = result
+        setter(_DELETE)
         # The update was successful.
         return True

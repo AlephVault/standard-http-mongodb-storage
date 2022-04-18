@@ -116,8 +116,10 @@ def _document_traverse(collection: Collection, document: Mapping[str, Any],
       a string or (None, False) will be returned).
     :param projection: The projection to use (to retrieve the fields from the final part of
       the traversed element).
-    :returns: A triple (document, part, setter) in which invoking setter(part2) replaces the
-      part in the appropriate point of the document.
+    :returns: A set of elements:
+      (None, False) when the element (or anything in the path) is not found.
+      (part, True) when the part is None or anything but a dict.
+      ((part, setter), True) when the part is a dictionary.
     """
 
     # The path has to be traversed. Each step is to be considered as a tuple
@@ -171,7 +173,7 @@ def _document_traverse(collection: Collection, document: Mapping[str, Any],
     part = included if flag else part
     # Return the document, the part and the setter. What to do (whether
     # to invoke the setter or not) is up to the caller only.
-    return document, part, setter
+    return (part, setter), True
 
 
 def list_item_get(collection: Collection, object_id: ObjectId, filter: Optional[dict] = None,
@@ -207,6 +209,12 @@ def list_item_get(collection: Collection, object_id: ObjectId, filter: Optional[
         if element is None:
             return None, False
         # Traverse and get everything.
-        document, part, setter = _document_traverse(collection, element, path, projection)
-        # Return the part. Do nothing else.
-        return part
+        result, found = _document_traverse(collection, element, path, projection)
+        if not found:
+            return None, False
+        # Return the results.
+        try:
+            part, setter = result
+            return part, True
+        except ValueError:
+            return result, True

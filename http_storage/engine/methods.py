@@ -118,8 +118,7 @@ def _document_traverse(collection: Collection, document: Mapping[str, Any],
       the traversed element).
     :returns: A set of elements:
       (None, False) when the element (or anything in the path) is not found.
-      (part, True) when the part is None or anything but a dict.
-      ((part, setter), True) when the part is a dictionary.
+      ((part, setter), True) when the part was found.
     """
 
     # The path has to be traversed. Each step is to be considered as a tuple
@@ -145,9 +144,9 @@ def _document_traverse(collection: Collection, document: Mapping[str, Any],
     # If the element is null, we return (None, True). Otherwise, if the
     # element to retrieve is a dict, we apply the projection (if present).
     if part is None:
-        return None, True
+        return (None, setter), True
     if not (isinstance(part, dict) and projection):
-        return part, True
+        return (part, setter), True
     # The projection goes like this:
     # 1. The projection may be a list of fields or a dict.
     # 2. The list version will be considered an inclusion: it will be
@@ -213,8 +212,43 @@ def list_item_get(collection: Collection, object_id: ObjectId, filter: Optional[
         if not found:
             return None, False
         # Return the results.
-        try:
-            part, setter = result
-            return part, True
-        except ValueError:
-            return result, True
+        part, _ = result
+        return part, True
+
+
+def list_item_put(collection: Collection, object_id: ObjectId, replacement: Mapping[str, Any],
+                  filter: Optional[dict] = None, path: Optional[List[Optional[Union[str, int]]]] = None):
+    """
+    Replaces a particular object from the list. It does not do anything if the element is not found.
+    :param collection: The collection to get a document from.
+    :param object_id: The particular _id to lookup. It will be added to the optional filter, if any.
+    :param replacement: The object (or part) to use as replacement.
+    :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will be
+      either a string or an integer to apply successive subscripts (the first entry must be a
+      string or (None, False) will be returned).
+    :return: A boolean telling whether the update could be done successfully.
+    """
+
+    filter = filter or {}
+    filter['_id'] = object_id
+    # The projection will be a MongoDB-compatible projection, typically.
+    # If using a weak path, the projection will consist of literal fields
+    # only, and not weird criteria like $-prefixed operators and will be
+    # used MANUALLY, later.
+    if not path:
+        operation = collection.replace_one(filter=filter, replacement=replacement, upsert=False)
+        return operation.modified_count != 0
+    else:
+        element = collection.find_one(filter=filter)
+        # If the element is None, return (None, False).
+        if element is None:
+            return False
+        # Traverse and get everything.
+        result, found = _document_traverse(collection, element, path, None)
+        if not found:
+            return False
+        # Get the result and replace.
+        _, setter = result
+        setter(replacement)
+        return True

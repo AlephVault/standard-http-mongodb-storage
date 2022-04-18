@@ -1,6 +1,6 @@
 import os
 from bson import ObjectId
-from typing import NamedTuple, Optional, List, Union, Dict, Tuple
+from typing import NamedTuple, Optional, List, Union, Dict, Mapping, Any
 from pymongo import ASCENDING, DESCENDING
 from pymongo.collection import Collection
 
@@ -83,15 +83,108 @@ def list_post(collection: Collection, document: dict):
     return result.inserted_id
 
 
+def _make_setter(collection: Collection, document: Mapping[str, Any], parent: Mapping[Union[str, int], Any],
+                 subscript: Union[str, int]):
+    """
+    Makes a setter to allow a part of the document to be updated in the database.
+    :param collection: The collection the document belongs to.
+    :param document: The document being traversed.
+    :param parent: The parent being updated, inside the document.
+    :param subscript: The subscript in which the update will occur.
+    :return: The setter.
+    """
+
+    def _setter(replacement: Mapping[Union[str, int], Any]):
+        parent[subscript] = replacement
+        collection.replace_one({"_id": document["_id"]}, document)
+
+    return _setter
+
+
+def _document_traverse(collection: Collection, document: Mapping[str, Any],
+                       path: Optional[List[Optional[Union[str, int]]]] = None,
+                       projection: Optional[Union[List, Dict[str, Union[int, bool]]]] = None):
+    """
+    Traverses an already retrieved document through a non-empty path and perhaps a projection.
+    At the end of traversal, then a callback will be invoked with the provision of both the
+    obtained part (perhaps projected) and, if the final part is not the entire document, a
+    way to update it and store it back.
+    :param collection: The collection the document belongs to.
+    :param document: The document to traverse.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will
+      be either a string or an integer to apply successive subscripts (the first entry must be
+      a string or (None, False) will be returned).
+    :param projection: The projection to use (to retrieve the fields from the final part of
+      the traversed element).
+    :returns: A triple (document, part, setter) in which invoking setter(part2) replaces the
+      part in the appropriate point of the document.
+    """
+
+    # The path has to be traversed. Each step is to be considered as a tuple
+    # of (field, subscript or None). A special criteria will be used when
+    # traversing everything.
+    part = document
+    setter = None
+    for subscript in path:
+        # If part is None, then we come from a previous iteration and, in
+        # this case, this means that we must return (None, False), as
+        # traversal cannot follow.
+        if part is None:
+            return None, False
+        # Then, the subscript is retrieved. If the value is not present, then
+        # we return (None, False), as if the object was not found at all.
+        if subscript is not None:
+            try:
+                part_ = part
+                part = part_[subscript]
+                setter = _make_setter(collection, document, part_, subscript)
+            except:
+                return None, False
+    # If the element is null, we return (None, True). Otherwise, if the
+    # element to retrieve is a dict, we apply the projection (if present).
+    if part is None:
+        return None, True
+    if not (isinstance(part, dict) and projection):
+        return part, True
+    # The projection goes like this:
+    # 1. The projection may be a list of fields or a dict.
+    # 2. The list version will be considered an inclusion: it will be
+    #    considered (only, [...]).
+    # 3. Each key in the dictionary will be {key: include} where the
+    #    include flag will be treated as boolean. It is an error to
+    #    have different boolean values in the flags.
+    if isinstance(projection, list):
+        projection = {k: True for k in projection}
+    if not isinstance(projection, dict):
+        raise TypeError("The projection must be a list or a dict")
+    flags = set(bool(v) for v in projection.values())
+    if len(flags) >= 2:
+        raise ValueError("The dict-format projection must not have both exclusions and inclusions")
+    # Get the only involved element in the flags set. It will be used
+    # to distinguish whether an exclusion or an inclusion has to be done.
+    flag = flags.pop()
+    included = {}
+    for k in projection.keys():
+        included[k] = part.pop(k, None)
+    # Finally, we keep either the included or excluded part, according
+    # to the flag value.
+    part = included if flag else part
+    # Return the document, the part and the setter. What to do (whether
+    # to invoke the setter or not) is up to the caller only.
+    return document, part, setter
+
+
 def list_item_get(collection: Collection, object_id: ObjectId, filter: Optional[dict] = None,
-                  path: Optional[List[Tuple[str, Optional[Union[str, int]]]]] = None,
+                  path: Optional[List[Optional[Union[str, int]]]] = None,
                   projection: Optional[Union[List, Dict[str, Union[int, bool]]]] = None):
     """
     Gets a particular object from the list.
     :param collection: The collection to get a document from.
     :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
     :param object_id: The particular _id to lookup. It will be added to the optional filter, if any.
-    :param path: The de-referencing path to use to get a part of the document.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will be
+      either a string or an integer to apply successive subscripts (the first entry must be a
+      string or (None, False) will be returned).
     :param projection: The projection to use on the last part of the path.
     :return: A tuple telling (element: dict, found: bool), where the element is a document or
       a part of it (depending on how it was filtered using the path), and the `found` flag tells
@@ -113,55 +206,7 @@ def list_item_get(collection: Collection, object_id: ObjectId, filter: Optional[
         # If the element is None, return (None, False).
         if element is None:
             return None, False
-        # The path has to be traversed. Each step is to be considered as a tuple
-        # of (field, subscript or None). A special criteria will be used when
-        # traversing everything.
-        part = element
-        for field, subscript in path:
-            # If part is None, then we come from a previous iteration and, in
-            # this case, this means that we must return (None, False), as
-            # traversal cannot follow.
-            if part is None:
-                return None, False
-            # Then, the field is retrieved. If the field is not present, then
-            # we return (None, False), as if the object was not found at all.
-            part = part.get(field, _NOT_FOUND)
-            if part is _NOT_FOUND:
-                return None, False
-            # If there is a subscript, then we attempt subscript access. If
-            # we get an error, we return (None, False), as if the object was
-            # not found at all.
-            if subscript is not None:
-                try:
-                    part = part[subscript]
-                except:
-                    return None, False
-        # If the element is null, we return (None, True). Otherwise, if the
-        # element to retrieve is a dict, we apply the projection (if present).
-        if part is None:
-            return None, True
-        if not (isinstance(part, dict) and projection):
-            return part, True
-        # The projection goes like this:
-        # 1. The projection may be a list of fields or a dict.
-        # 2. The list version will be considered an inclusion: it will be
-        #    considered (only, [...]).
-        # 3. Each key in the dictionary will be {key: include} where the
-        #    include flag will be treated as boolean. It is an error to
-        #    have different boolean values in the flags.
-        if isinstance(projection, list):
-            projection = {k: True for k in projection}
-        if not isinstance(projection, dict):
-            raise TypeError("The projection must be a list or a dict")
-        flags = set(bool(v) for v in projection.values())
-        if len(flags) >= 2:
-            raise ValueError("The dict-format projection must not have both exclusions and inclusions")
-        # Get the only involved element in the flags set. It will be used
-        # to distinguish whether an exclusion or an inclusion has to be done.
-        flag = flags.pop()
-        included = {}
-        for k in projection.keys():
-            included[k] = part.pop(k, None)
-        # Finally, we return either the included or excluded part, according
-        # to the flag value.
-        return included if flag else part
+        # Traverse and get everything.
+        document, part, setter = _document_traverse(collection, element, path, projection)
+        # Return the part. Do nothing else.
+        return part

@@ -54,20 +54,20 @@ def parse_path(paths_dsn: Optional[dict] = None, extra_path: Optional[List[str]]
                     return None, False
                 # Extract the field to use from database, and also the
                 # expected type of the field.
-                field = path_dsn['field']
-                ftype = path_dsn['type']
-                result.append(field)
-                if ftype == 'scalar':
+                field_name = path_dsn['name']
+                field_type = path_dsn['type']
+                result.append(field_name)
+                if field_type == 'scalar':
                     # The field will be treated as scalar (despite its
                     # true type). Nothing else to do here.
                     pass
-                elif ftype == 'list':
+                elif field_type == 'list':
                     # The field will be treated as list (and it will be
                     # expected to be a list in the document, and expect
                     # an integer index as the next chunk). Mark the flag
                     # to expect a subscript.
                     expecting_optional_list_index = True
-                elif ftype == 'dict':
+                elif field_type == 'dict':
                     # The field will be treated as dict (and it will be
                     # expected to be a dict in the document, and expect
                     # a string index as the next chunk). Mark the flag

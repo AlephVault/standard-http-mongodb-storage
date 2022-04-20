@@ -2,6 +2,15 @@ import os
 from cerberus import schema_registry
 
 
+METHOD = {
+    "type": {
+        "type": "string",
+        "allowed": ["view", "operation"]
+    }
+}
+schema_registry.add("http_storage.schemas.method", METHOD)
+
+
 RESOURCE = {
     "type": {
         "type": "string",
@@ -18,6 +27,18 @@ RESOURCE = {
         "required": True,
         "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
     },
+    "methods": {
+        "type": "dict",
+        "default_setter": lambda doc: {},
+        "valuesrules": {
+            "type": "dict",
+            "schema": "http_storage.schemas.method",
+        },
+        "keysrules": {
+            "type": "string",
+            "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
+        }
+    }
 }
 schema_registry.add("http_storage.schemas.resource", RESOURCE)
 

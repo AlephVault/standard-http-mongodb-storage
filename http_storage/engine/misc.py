@@ -3,9 +3,16 @@ from typing import Optional, List
 
 def parse_path(paths_dsn: Optional[dict] = None, extra_path: Optional[List[str]] = None):
     """
-    Parses a path, which can be understood as an URL chunk.
+    Parses a path, which can be understood as an URL chunk. The extra_path
+    is a path obtained by something like this:
+
+    @app.route('/', defaults={'extra_path': ''})
+    @app.route("/<path:extra_path>", methods=[...])
+    def some_handler(extra_path: str):
+        ...
+
     :param extra_path: The path to parse. By this point, the path comes
-      as a list of strings (already url-decoded).
+      as a flak arbitrary path (a string, already url-decoded).
     :param paths_dsn: The paths DSN being used. By this point, the dsn
       format is completely valid.
     :return: If the parse was appropriate (in format and in contrast
@@ -13,6 +20,11 @@ def parse_path(paths_dsn: Optional[dict] = None, extra_path: Optional[List[str]]
       the parse was successful. Otherwise, returns (None, False).
     """
 
+    # Converting the path to a list, by splitting by /, and removing
+    # all the empty elements.
+    extra_path = [part for part in (extra_path or '').split('/') if part]
+    # Then, starting the logic (one out of two logics will be used,
+    # depending on when the DSN is available or not).
     if paths_dsn:
         # A path should be present.
         if not extra_path:
@@ -48,7 +60,7 @@ def parse_path(paths_dsn: Optional[dict] = None, extra_path: Optional[List[str]]
                 if ftype == 'scalar':
                     # The field will be treated as scalar (despite its
                     # true type). Nothing else to do here.
-                    continue
+                    pass
                 elif ftype == 'list':
                     # The field will be treated as list (and it will be
                     # expected to be a list in the document, and expect
@@ -68,6 +80,8 @@ def parse_path(paths_dsn: Optional[dict] = None, extra_path: Optional[List[str]]
                 else:
                     # This is just a marker - it will NEVER be reached.
                     return None, False
+                # Finally, take the child DSN, if any.
+                paths_dsn = path_dsn.get("children", {})
         except StopIteration:
             # The process stopped appropriately, unless it expected
             # a key or index. In that case, then fail.

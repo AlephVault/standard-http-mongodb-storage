@@ -11,6 +11,32 @@ METHOD = {
 schema_registry.add("http_storage.schemas.method", METHOD)
 
 
+PARTIAL = {
+    "field_type": {
+        "type": "string",
+        "required": True,
+        "allowed": ["scalar", "list", "dict"]
+    },
+    "field_name": {
+        "type": "string",
+        "required": True,
+        "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
+    },
+    "children": {
+        "type": "dict",
+        "valuesrules": {
+            "type": "dict",
+            "schema": "http_storage.schemas.partial",
+        },
+        "keysrules": {
+            "type": "string",
+            "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
+        }
+    }
+}
+schema_registry.add("http_storage.schemas.partial", PARTIAL)
+
+
 RESOURCE = {
     "type": {
         "type": "string",
@@ -41,20 +67,35 @@ RESOURCE = {
     },
     "list_verbs": {
         "type": "list",
+        # Note: It is not required - by default it takes ALL the verbs.
         # Note: default_setter does not work since it is always processed
         #       and even when the dependency is not satisfied.
+        "empty": False,
         "allowed": ['create', 'list', 'read', 'replace', 'update', 'delete'],
         "dependencies": {
             "type": "list"
         }
     },
-    "single_verbs": {
+    "simple_verbs": {
         "type": "list",
+        # Note: It is not required - by default it takes ALL the verbs.
         # Note: default_setter does not work since it is always processed
         #       and even when the dependency is not satisfied.
+        "empty": False,
         "allowed": ['create', 'read', 'replace', 'update', 'delete'],
         "dependencies": {
             "type": "simple"
+        }
+    },
+    "partials": {
+        "type": "dict",
+        "valuesrules": {
+            "type": "dict",
+            "schema": "http_storage.schemas.partial",
+        },
+        "keysrules": {
+            "type": "string",
+            "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
         }
     }
 }

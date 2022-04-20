@@ -54,8 +54,8 @@ def parse_path(paths_dsn: Optional[dict] = None, extra_path: Optional[List[str]]
                     return None, False
                 # Extract the field to use from database, and also the
                 # expected type of the field.
-                field_name = path_dsn['name']
-                field_type = path_dsn['type']
+                field_name = path_dsn['field_name']
+                field_type = path_dsn['field_type']
                 result.append(field_name)
                 if field_type == 'scalar':
                     # The field will be treated as scalar (despite its

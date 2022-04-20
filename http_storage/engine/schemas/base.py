@@ -38,6 +38,24 @@ RESOURCE = {
             "type": "string",
             "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
         }
+    },
+    "list_verbs": {
+        "type": "list",
+        # Note: default_setter does not work since it is always processed
+        #       and even when the dependency is not satisfied.
+        "allowed": ['create', 'list', 'read', 'replace', 'update', 'delete'],
+        "dependencies": {
+            "type": "list"
+        }
+    },
+    "single_verbs": {
+        "type": "list",
+        # Note: default_setter does not work since it is always processed
+        #       and even when the dependency is not satisfied.
+        "allowed": ['create', 'read', 'replace', 'update', 'delete'],
+        "dependencies": {
+            "type": "simple"
+        }
     }
 }
 schema_registry.add("http_storage.schemas.resource", RESOURCE)

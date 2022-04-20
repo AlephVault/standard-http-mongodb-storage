@@ -299,7 +299,7 @@ def list_item_patch(collection: Collection, object_id: ObjectId, patch: Mapping[
 def list_item_delete(collection: Collection, object_id: ObjectId, filter: Optional[dict] = None,
                      path: Optional[List[Optional[Union[str, int]]]] = None):
     """
-    deleted a particular object from the list. It does not do anything if the element is not found.
+    Deletes a particular object from the list. It does not do anything if the element is not found.
     :param collection: The collection to get a document from.
     :param object_id: The particular _id to lookup. It will be added to the optional filter, if any.
     :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
@@ -328,3 +328,100 @@ def list_item_delete(collection: Collection, object_id: ObjectId, filter: Option
         setter(_DELETE)
         # The update was successful.
         return True
+
+
+def single_get(collection: Collection, filter: Optional[dict] = None,
+               path: Optional[List[Optional[Union[str, int]]]] = None,
+               projection: Optional[Union[List, Dict[str, Union[int, bool]]]] = None):
+    """
+    Gets a singleton resource.
+    :param collection: The collection to get the document from.
+    :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will be
+      either a string or an integer to apply successive subscripts (the first entry must be a
+      string or (None, False) will be returned).
+    :param projection: The projection to use on the last part of the path.
+    :return: A tuple telling (element: dict, found: bool), where the element is a document or
+      a part of it (depending on how it was filtered using the path), and the `found` flag tells
+      whether the element and all the internal path was found or not.
+    """
+
+    result = collection.find_one(filter, projection=["_id"])
+    if not result:
+        return None, False
+    return list_item_get(collection, result["_id"], filter, path, projection)
+
+
+def single_put(collection: Collection, replacement: Union[object, Mapping[str, Any]],
+               filter: Optional[dict] = None, path: Optional[List[Optional[Union[str, int]]]] = None):
+    """
+    Replaces a singleton resource. It does not do anything if the element is not found.
+    :param collection: The collection to get the document from.
+    :param replacement: The object (or part) to use as replacement.
+    :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will be
+      either a string or an integer to apply successive subscripts (the first entry must be a
+      string or (None, False) will be returned).
+    :return: A boolean telling whether the update could be done successfully.
+    """
+
+    result = collection.find_one(filter, projection=["_id"])
+    if not result:
+        return None, False
+    return list_item_put(collection, result["_id"], replacement, filter, path)
+
+
+def single_patch(collection: Collection, patch: Mapping[str, Any], filter: Optional[dict] = None,
+                 path: Optional[List[Optional[Union[str, int]]]] = None):
+    """
+    Updates a singleton resource. It does not do anything if the element is not found.
+    :param collection: The collection to get the document from.
+    :param patch: The patch to apply. If a path is used, then only the "$set" is used, and the
+      entries with "." will be discarded.
+    :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will be
+      either a string or an integer to apply successive subscripts (the first entry must be a
+      string or (None, False) will be returned).
+    :return: A boolean telling whether the update could be done successfully.
+    """
+
+    result = collection.find_one(filter, projection=["_id"])
+    if not result:
+        return None, False
+    return list_item_patch(collection, result["_id"], patch, filter, path)
+
+
+def single_delete(collection: Collection, filter: Optional[dict] = None,
+                  path: Optional[List[Optional[Union[str, int]]]] = None):
+    """
+    Deletes a singleton resource. It does not do anything if the element is not found.
+    :param collection: The collection to get the document from.
+    :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
+    :param path: The de-referencing path to use to get a part of the document. Each entry will be
+      either a string or an integer to apply successive subscripts (the first entry must be a
+      string or (None, False) will be returned).
+    :return: A boolean telling whether the delete could be done successfully.
+    """
+
+    result = collection.find_one(filter, projection=["_id"])
+    if not result:
+        return None, False
+    return list_item_delete(collection, result["_id"], filter, path)
+
+
+def single_create(collection: Collection, document: dict, filter: Optional[dict] = None):
+    """
+    Creates a singleton document. It fails if a document already exists.
+    :param collection: The collection to insert the document into.
+    :param filter: An optional filter to use. The idea behind this filter is to be static, preset.
+    :param document: The document to insert.
+    :return: Whether the document was successfully inserted or not (this would mean that the
+      collection by that filter already has a document being specified). We don't actually
+    care about its insert id.
+    """
+
+    result = collection.find_one(filter, projection=["_id"])
+    if not result:
+        return False
+    collection.insert_one(document)
+    return True

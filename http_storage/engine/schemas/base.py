@@ -2,13 +2,29 @@ import os
 from cerberus import schema_registry
 
 
-METHOD = {
+SIMPLE_METHOD = {
     "type": {
         "type": "string",
+        "required": True,
         "allowed": ["view", "operation"]
     }
 }
-schema_registry.add("http_storage.schemas.method", METHOD)
+schema_registry.add("http_storage.schemas.simple-method", SIMPLE_METHOD)
+
+
+LIST_METHOD = {
+    "type": {
+        "type": "string",
+        "required": True,
+        "allowed": ["view", "operation"]
+    },
+    "scope": {
+        "type": "string",
+        "required": True,
+        "allowed": ["list", "item"]
+    }
+}
+schema_registry.add("http_storage.schemas.list-method", LIST_METHOD)
 
 
 PARTIAL = {
@@ -56,36 +72,43 @@ RESOURCE = {
     "methods": {
         "type": "dict",
         "default_setter": lambda doc: {},
-        "valuesrules": {
-            "type": "dict",
-            "schema": "http_storage.schemas.method",
-        },
         "keysrules": {
             "type": "string",
             "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
-        }
+        },
+        "anyof": [
+            {
+                "dependencies": {"type": "list"},
+                "valuesrules": {
+                    "type": "dict",
+                    "schema": "http_storage.schemas.list-method",
+                },
+            },
+            {
+                "dependencies": {"type": "simple"},
+                "valuesrules": {
+                    "type": "dict",
+                    "schema": "http_storage.schemas.simple-method",
+                },
+            }
+        ]
     },
-    "list_verbs": {
+    "verbs": {
         "type": "list",
         # Note: It is not required - by default it takes ALL the verbs.
         # Note: default_setter does not work since it is always processed
         #       and even when the dependency is not satisfied.
         "empty": False,
-        "allowed": ['create', 'list', 'read', 'replace', 'update', 'delete'],
-        "dependencies": {
-            "type": "list"
-        }
-    },
-    "simple_verbs": {
-        "type": "list",
-        # Note: It is not required - by default it takes ALL the verbs.
-        # Note: default_setter does not work since it is always processed
-        #       and even when the dependency is not satisfied.
-        "empty": False,
-        "allowed": ['create', 'read', 'replace', 'update', 'delete'],
-        "dependencies": {
-            "type": "simple"
-        }
+        "anyof": [
+            {
+                "dependencies": {"type": "list"},
+                "allowed": ['create', 'list', 'read', 'replace', 'update', 'delete']
+            },
+            {
+                "dependencies": {"type": "simple"},
+                "allowed": ['create', 'read', 'replace', 'update', 'delete']
+            }
+        ]
     },
     "partials": {
         "type": "dict",

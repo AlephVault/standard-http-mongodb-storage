@@ -40,6 +40,7 @@ PARTIAL = {
     },
     "children": {
         "type": "dict",
+        # Default is None.
         "valuesrules": {
             "type": "dict",
             "schema": "http_storage.schemas.partial",

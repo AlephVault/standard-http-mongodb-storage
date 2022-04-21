@@ -94,17 +94,20 @@ RESOURCE = {
         ]
     },
     "verbs": {
-        "type": "list",
-        # Note: It is not required - by default it takes ALL the verbs.
-        # Note: default_setter does not work since it is always processed
-        #       and even when the dependency is not satisfied.
         "empty": False,
+        "default_setter": lambda doc: '*',
         "anyof": [
             {
+                "type": "string",
+                "allowed": ["*"]
+            },
+            {
+                "type": "list",
                 "dependencies": {"type": "list"},
                 "allowed": ['create', 'list', 'read', 'replace', 'update', 'delete']
             },
             {
+                "type": "list",
                 "dependencies": {"type": "simple"},
                 "allowed": ['create', 'read', 'replace', 'update', 'delete']
             }
@@ -112,6 +115,7 @@ RESOURCE = {
     },
     "partials": {
         "type": "dict",
+        "default_setter": lambda doc: {},
         "valuesrules": {
             "type": "dict",
             "schema": "http_storage.schemas.partial",

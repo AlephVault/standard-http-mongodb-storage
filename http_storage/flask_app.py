@@ -142,6 +142,8 @@ class StorageApp(Flask):
             collection_name = resource_definition["collection"]
             collection = CLIENT[db_name][collection_name]
             filter = resource_definition["filter"]
+            if resource_definition["soft_delete"]:
+                filter = {**filter, "_deleted": False}
             if verbs != "*" and request.method not in verbs:
                 return make_response(jsonify({"code": "not-found"}), 404)
             return f(resource, resource_definition, db_name, collection_name, collection, filter, *args, **kwargs)
@@ -295,7 +297,7 @@ class StorageApp(Flask):
                 validator = self._resource_validators[resource]
                 if validator.validate(request.json):
                     collection.replace_one(filter, validator.document, upsert=False)
-                    return make_response(jsonify({"code": "ok"}), 201)
+                    return make_response(jsonify({"code": "ok"}), 200)
                 else:
                     return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
             else:
@@ -314,6 +316,13 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            element = collection.find_one(filter=filter)
+            if element:
+                collection.update_one(filter, request.json, upsert=False)
+                return make_response(jsonify({"code": "ok"}), 200)
+            else:
+                return make_response(jsonify({"code": "not-found"}), 404)
+
         @self.route("/<string:resource>", methods=["DELETE"])
         @self._capture_unexpected_errors
         @self._using_resource
@@ -325,6 +334,19 @@ class StorageApp(Flask):
             it exists (otherwise, returns a 404 error).
             :return: Flask-compatible responses.
             """
+
+            if resource_definition["soft_delete"]:
+                result = collection.update_one(filter, {"$set": {"_deleted": True}}, upsert=False)
+                if result.modified_count:
+                    return make_response(jsonify({"code": "ok"}), 200)
+                else:
+                    return make_response(jsonify({"code": "not-found"}), 404)
+            else:
+                result = collection.delete_one(filter)
+                if result.deleted_count:
+                    return make_response(jsonify({"code": "ok"}), 200)
+                else:
+                    return make_response(jsonify({"code": "not-found"}), 404)
 
         # Second, element-wise resource methods.
 

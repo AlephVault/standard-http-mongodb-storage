@@ -2,29 +2,32 @@ import os
 from cerberus import schema_registry
 
 
-SIMPLE_METHOD = {
-    "type": {
-        "type": "string",
-        "required": True,
-        "allowed": ["view", "operation"]
-    }
-}
-schema_registry.add("http_storage.schemas.simple-method", SIMPLE_METHOD)
-
-
-LIST_METHOD = {
+METHOD = {
     "type": {
         "type": "string",
         "required": True,
         "allowed": ["view", "operation"]
     },
-    "scope": {
-        "type": "string",
-        "required": True,
-        "allowed": ["list", "item"]
+    "handler": {
+        "type": "method",
+        "required": True
     }
 }
-schema_registry.add("http_storage.schemas.list-method", LIST_METHOD)
+schema_registry.add("http_storage.schemas.method", METHOD)
+
+
+ITEM_METHOD = {
+    "type": {
+        "type": "string",
+        "required": True,
+        "allowed": ["view", "operation"]
+    },
+    "handler": {
+        "type": "item-method",
+        "required": True
+    }
+}
+schema_registry.add("http_storage.schemas.item-method", ITEM_METHOD)
 
 
 PARTIAL = {
@@ -77,22 +80,23 @@ RESOURCE = {
             "type": "string",
             "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
         },
-        "anyof": [
-            {
-                "dependencies": {"type": "list"},
-                "valuesrules": {
-                    "type": "dict",
-                    "schema": "http_storage.schemas.list-method",
-                },
-            },
-            {
-                "dependencies": {"type": "simple"},
-                "valuesrules": {
-                    "type": "dict",
-                    "schema": "http_storage.schemas.simple-method",
-                },
-            }
-        ]
+        "valuesrules": {
+            "type": "dict",
+            "schema": "http_storage.schemas.method",
+        },
+    },
+    "item-methods": {
+        "type": "dict",
+        "default_setter": lambda doc: {},
+        "dependencies": {"type": "list"},
+        "keysrules": {
+            "type": "string",
+            "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
+        },
+        "valuesrules": {
+            "type": "dict",
+            "schema": "http_storage.schemas.item-method",
+        },
     },
     "verbs": {
         "empty": False,

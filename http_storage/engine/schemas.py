@@ -112,7 +112,7 @@ RESOURCE = {
             "schema": "http_storage.schemas.method",
         },
     },
-    "item-methods": {
+    "item_methods": {
         "type": "dict",
         # No default setter will be given here, since it collides
         # with the dependency setting (breaks for "type": "simple").
@@ -157,6 +157,10 @@ RESOURCE = {
             "type": "string",
             "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
         }
+    },
+    "schema": {
+        "type": "dict",
+        "default_setter": lambda doc: {}
     }
 }
 schema_registry.add("http_storage.schemas.resource", RESOURCE)

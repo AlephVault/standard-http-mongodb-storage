@@ -45,7 +45,7 @@ class StorageApp(Flask):
         # Then, validate them (regardless being instance or class arguments).
         # Once the schema is validated, keep the normalized document for future
         # uses (e.g. extract the auth db/collection from it, and later extract
-        # all the resources' metadata from it).
+        # all the resources" metadata from it).
         if not (isinstance(self._validator_class, type) and issubclass(self._validator_class, MongoDBEnhancedValidator)):
             raise ImproperlyConfiguredError("Wrong or missing validator class")
         validator = self._validator_class("http_storage.schemas.settings")
@@ -80,69 +80,26 @@ class StorageApp(Flask):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
             # Get the auth settings.
-            auth_db = self._resources['auth']['db']
-            auth_table = self._resources['auth']['collection']
+            auth_db = self._resources["auth"]["db"]
+            auth_table = self._resources["auth"]["collection"]
             # Get the header. It must be "bearer {token}".
-            authorization = request.headers.get('Authorization')
+            authorization = request.headers.get("Authorization")
             if not authorization:
-                return make_response(jsonify({'code': 'authorization:missing-header'}), 401)
+                return make_response(jsonify({"code": "authorization:missing-header"}), 401)
             # Split it, and expect it to be "bearer".
             try:
-                scheme, token = authorization.split(' ')
-                if scheme.lower() != 'bearer':
-                    return make_response(jsonify({'code': 'authorization:bad-scheme'}), 400)
+                scheme, token = authorization.split(" ")
+                if scheme.lower() != "bearer":
+                    return make_response(jsonify({"code": "authorization:bad-scheme"}), 400)
             except ValueError:
-                return make_response(jsonify({'code': 'authorization:syntax-error'}), 400)
+                return make_response(jsonify({"code": "authorization:syntax-error"}), 400)
             # Check the token.
-            token = CLIENT[auth_db][auth_table].find_one({'_id': ObjectId(token),
-                                                          'valid_until': {"$not": {"$lt": datetime.now()}}})
+            token = CLIENT[auth_db][auth_table].find_one({"_id": ObjectId(token),
+                                                          "valid_until": {"$not": {"$lt": datetime.now()}}})
             if not token:
-                return make_response(jsonify({'code': 'authorization:not-found'}), 401)
+                return make_response(jsonify({"code": "authorization:not-found"}), 401)
             # If the validation passed, then we invoke the decorated function.
             return f(*args, **kwargs)
-        return wrapper
-
-    def _schema_required(self, schema: dict):
-        """
-        Returns a decorator, with a given schema, that wraps a function
-        that requires a json body matching the given schema in order to
-        proceed.
-        :return: A decorator.
-        """
-
-        MongoDBEnhancedValidator.apply_default_coercers(schema)
-        # Get the id of the schema.
-        schema_id = id(schema)
-        # Attempt to get the already-existing schema decorator.
-        schema_decorator = self._schema_decorators.get(schema_id)
-        if schema_decorator:
-            return schema_decorator
-
-        # Define and store the decorator, and return it.
-        def wrapper(f: Callable):
-            validator = self._validator_class(schema)
-
-            # This is the function that will run the logic.
-            @functools.wraps(f)
-            def wrapped(*args, **kwargs):
-                # First, we extract the JSON body.
-                try:
-                    if not request.is_json:
-                        pass
-                    data = request.json
-                except Exception as e:
-                    return make_response(jsonify({'code': 'format:unexpected'}), 400)
-
-                # Then, we validate the JSON body against the
-                # required schema, and invoke the decorated
-                # function with the normalized valid object.
-                if validator.validate(data):
-                    return f(validator.document, *args, **kwargs)
-                else:
-                    return make_response(jsonify({'code': 'schema:invalid', 'errors': validator.errors}), 400)
-            return wrapped
-
-        self._schema_decorators[schema_id] = wrapper
         return wrapper
 
     def _register_endpoints(self):
@@ -162,7 +119,7 @@ class StorageApp(Flask):
             if not value:
                 value = []
             elif isinstance(value, str):
-                value = value.split(',')
+                value = value.split(",")
 
             result = []
             for element in value:
@@ -170,13 +127,13 @@ class StorageApp(Flask):
                 if not element:
                     raise ValueError("Invalid order_by field: empty name")
                 direction = ASCENDING
-                if element[0] == '-':
+                if element[0] == "-":
                     element = element[1:]
                     direction = DESCENDING
                 result.append((element, direction))
             return result
 
-        @self.route('/<string:resource>', methods=["GET"])
+        @self.route("/<string:resource>", methods=["GET"])
         @self._bearer_required
         def resource_read(resource: str):
             """
@@ -223,7 +180,7 @@ class StorageApp(Flask):
                 else:
                     return make_response(jsonify({"code": "not-found"}), 404)
 
-        @self.route('/<string:resource>', methods=["POST"])
+        @self.route("/<string:resource>", methods=["POST"])
         @self._bearer_required
         def resource_create(resource: str):
             """
@@ -245,17 +202,20 @@ class StorageApp(Flask):
             db_name = resource_definition["db"]
             collection_name = resource_definition["collection"]
             collection = CLIENT[db_name][collection_name]
-            filter = resource_definition["filter"]
             if verbs != "*" and "GET" not in verbs:
                 return make_response(jsonify({"code": "not-found"}), 404)
 
             # Require the body to be json, and validate it.
             if not request.is_json:
-                return make_response(jsonify({'code': 'format:unexpected'}), 400)
-            body = request.json
-            validator = self._resource_validators()
+                return make_response(jsonify({"code": "format:unexpected"}), 400)
+            validator = self._resource_validators[resource]
+            if validator.validate(request.json):
+                result = collection.insert_one(validator.document)
+                return make_response(jsonify({"id": result.inserted_id}), 201)
+            else:
+                return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
 
-        @self.route('/<string:resource>/~<string:method>', methods=["GET"])
+        @self.route("/<string:resource>/~<string:method>", methods=["GET"])
         @self._bearer_required
         def resource_view(resource: str, method: str):
             """
@@ -268,7 +228,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>/~<string:method>', methods=["POST"])
+        @self.route("/<string:resource>/~<string:method>", methods=["POST"])
         @self._bearer_required
         def resource_operation(resource: str, method: str):
             """
@@ -281,7 +241,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>', methods=["PUT"])
+        @self.route("/<string:resource>", methods=["PUT"])
         @self._bearer_required
         def resource_read(resource: str):
             """
@@ -292,7 +252,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>', methods=["PATCH"])
+        @self.route("/<string:resource>", methods=["PATCH"])
         @self._bearer_required
         def resource_create(resource: str):
             """
@@ -303,7 +263,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>', methods=["DELETE"])
+        @self.route("/<string:resource>", methods=["DELETE"])
         @self._bearer_required
         def resource_create(resource: str):
             """
@@ -315,7 +275,7 @@ class StorageApp(Flask):
 
         # Second, element-wise resource methods.
 
-        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["GET"])
+        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["GET"])
         @self._bearer_required
         def item_resource_read(resource: str, object_id: str):
             """
@@ -325,7 +285,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["PUT"])
+        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["PUT"])
         @self._bearer_required
         def item_resource_replace(resource: str, object_id: str):
             """
@@ -337,7 +297,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["PATCH"])
+        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["PATCH"])
         @self._bearer_required
         def item_resource_update(resource: str, object_id: str):
             """
@@ -349,7 +309,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["DELETE"])
+        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["DELETE"])
         @self._bearer_required
         def item_resource_delete(resource: str, object_id: str):
             """
@@ -360,7 +320,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>/~<string:method>', methods=["GET"])
+        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>/~<string:method>", methods=["GET"])
         @self._bearer_required
         def item_resource_view(resource: str, object_id: str, method: str):
             """
@@ -373,7 +333,7 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>/~<string:method>', methods=["POST"])
+        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>/~<string:method>", methods=["POST"])
         @self._bearer_required
         def item_resource_operation(resource: str, object_id: str, method: str):
             """

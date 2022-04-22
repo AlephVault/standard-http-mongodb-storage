@@ -73,6 +73,10 @@ RESOURCE = {
         "required": True,
         "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
     },
+    "filter": {
+        "type": "dict",
+        "default_setter": lambda doc: {},
+    },
     "methods": {
         "type": "dict",
         "default_setter": lambda doc: {},

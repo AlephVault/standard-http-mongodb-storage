@@ -330,7 +330,7 @@ def list_item_delete(collection: Collection, object_id: ObjectId, filter: Option
         return True
 
 
-def single_get(collection: Collection, filter: Optional[dict] = None,
+def simple_get(collection: Collection, filter: Optional[dict] = None,
                path: Optional[List[Optional[Union[str, int]]]] = None,
                projection: Optional[Union[List, Dict[str, Union[int, bool]]]] = None):
     """
@@ -352,7 +352,7 @@ def single_get(collection: Collection, filter: Optional[dict] = None,
     return list_item_get(collection, result["_id"], filter, path, projection)
 
 
-def single_put(collection: Collection, replacement: Union[object, Mapping[str, Any]],
+def simple_put(collection: Collection, replacement: Union[object, Mapping[str, Any]],
                filter: Optional[dict] = None, path: Optional[List[Optional[Union[str, int]]]] = None):
     """
     Replaces a singleton resource. It does not do anything if the element is not found.
@@ -371,7 +371,7 @@ def single_put(collection: Collection, replacement: Union[object, Mapping[str, A
     return list_item_put(collection, result["_id"], replacement, filter, path)
 
 
-def single_patch(collection: Collection, patch: Mapping[str, Any], filter: Optional[dict] = None,
+def simple_patch(collection: Collection, patch: Mapping[str, Any], filter: Optional[dict] = None,
                  path: Optional[List[Optional[Union[str, int]]]] = None):
     """
     Updates a singleton resource. It does not do anything if the element is not found.
@@ -391,7 +391,7 @@ def single_patch(collection: Collection, patch: Mapping[str, Any], filter: Optio
     return list_item_patch(collection, result["_id"], patch, filter, path)
 
 
-def single_delete(collection: Collection, filter: Optional[dict] = None,
+def simple_delete(collection: Collection, filter: Optional[dict] = None,
                   path: Optional[List[Optional[Union[str, int]]]] = None):
     """
     Deletes a singleton resource. It does not do anything if the element is not found.
@@ -409,7 +409,7 @@ def single_delete(collection: Collection, filter: Optional[dict] = None,
     return list_item_delete(collection, result["_id"], filter, path)
 
 
-def single_create(collection: Collection, document: dict, filter: Optional[dict] = None):
+def simple_create(collection: Collection, document: dict, filter: Optional[dict] = None):
     """
     Creates a singleton document. It fails if a document already exists.
     :param collection: The collection to insert the document into.

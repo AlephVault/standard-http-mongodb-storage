@@ -250,8 +250,8 @@ class StorageApp(Flask):
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
-        def resource_view(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                          collection: Collection, filter: dict, method: str):
+        def resource_method(resource: str, resource_definition: dict, db_name: str, collection_name: str,
+                            collection: Collection, filter: dict, method: str):
             """
             Intended for list-type resources and simple-type resources.
             Implementations should operate over {collection}.find() for
@@ -268,7 +268,6 @@ class StorageApp(Flask):
                 else:
                     if method_entry["type"] != "operation":
                         return make_response(jsonify({"code": "not-found"}), 404)
-
             except KeyError:
                 return make_response(jsonify({"code": "not-found"}), 404)
 
@@ -440,7 +439,7 @@ class StorageApp(Flask):
                 else:
                     return make_response(jsonify({"code": "not-found"}), 404)
 
-        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>/~<string:method>", methods=["GET"])
+        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>/~<string:method>", methods=["GET", "POST"])
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
@@ -453,15 +452,19 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
-        @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>/~<string:method>", methods=["POST"])
-        @self._capture_unexpected_errors
-        @self._using_resource
-        @self._bearer_required
-        def item_resource_operation(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                                    collection: Collection, filter: dict, object_id: str, method: str):
-            """
-            Implementation should operate over {collection}.find_one(
-                {"_id": ObjectId(object_id)}
-            ). This operation can make changes.
-            :return: Flask-compatible responses.
-            """
+            try:
+                method_entry = resource_definition["item_methods"][method]
+                if request.method == "GET":
+                    if method_entry["type"] != "view":
+                        return make_response(jsonify({"code": "not-found"}), 404)
+                else:
+                    if method_entry["type"] != "operation":
+                        return make_response(jsonify({"code": "not-found"}), 404)
+            except KeyError:
+                return make_response(jsonify({"code": "not-found"}), 404)
+
+            # Getting the appropriate instance.
+            instance = method_entry["handler"]()
+
+            # Invoke the method
+            return instance(CLIENT, resource, method, db_name, collection_name, filter, ObjectId(object_id))

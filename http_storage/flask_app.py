@@ -17,9 +17,6 @@ class ImproperlyConfiguredError(Exception):
     """
 
 
-NOT_FOUND = {"code": "not-found"}, 404
-
-
 class StorageApp(Flask):
     """
     A Standard HTTP Storage app. Among other things, it provides
@@ -53,9 +50,20 @@ class StorageApp(Flask):
             raise ImproperlyConfiguredError("Wrong or missing validator class")
         validator = self._validator_class("http_storage.schemas.settings")
         if not validator.validate(resources):
-            raise ImproperlyConfiguredError(f"Validation errors on resource schema: {validator.errors}")
+            raise ImproperlyConfiguredError(f"Validation errors on resources DSL: {validator.errors}")
         self._resources = validator.document
+        self._resource_validators = {}
+        for key, resource in self._resources.items():
+            schema = resource["schema"]
+            if not schema:
+                raise ImproperlyConfiguredError(f"Validation errors on resource schema for key '{key}': it is empty")
+            else:
+                try:
+                    self._resource_validators[key] = self._validator_class(schema)
+                except:
+                    raise ImproperlyConfiguredError(f"Validation errors on resource schema for key '{key}'")
 
+        # Then, the base initialization must occur.
         super().__init__(*args, **kwargs)
 
         # After everything is initialized, the endpoints must be registered.
@@ -182,14 +190,14 @@ class StorageApp(Flask):
             # First, get the resource definition.
             resource_definition = self._resources.get(resource)
             if not resource_definition:
-                return NOT_FOUND
+                return make_response(jsonify({"code": "not-found"}), 404)
             verbs = resource_definition["verbs"]
             db_name = resource_definition["db"]
             collection_name = resource_definition["collection"]
             collection = CLIENT[db_name][collection_name]
             filter = resource_definition["filter"]
             if verbs != "*" and "GET" not in verbs:
-                return NOT_FOUND
+                return make_response(jsonify({"code": "not-found"}), 404)
 
             # Its "type" will be "list" or "simple".
             if resource_definition["type"] == "list":
@@ -206,14 +214,14 @@ class StorageApp(Flask):
                 if limit:
                     query = query.limit(limit)
 
-                return jsonify(list(query)), 200
+                return make_response(jsonify(list(query)), 200)
             else:
                 # Process a "simple" resource.
                 element = collection.find_one(filter=filter, projection=resource_definition.get("projection"))
                 if element:
-                    return jsonify(element), 200
+                    return make_response(jsonify(element), 200)
                 else:
-                    return NOT_FOUND
+                    return make_response(jsonify({"code": "not-found"}), 404)
 
         @self.route('/<string:resource>', methods=["POST"])
         @self._bearer_required
@@ -228,6 +236,24 @@ class StorageApp(Flask):
             :param resource: The intended resource name.
             :return: Flask-compatible responses.
             """
+
+            # First, get the resource definition.
+            resource_definition = self._resources.get(resource)
+            if not resource_definition:
+                return make_response(jsonify({"code": "not-found"}), 404)
+            verbs = resource_definition["verbs"]
+            db_name = resource_definition["db"]
+            collection_name = resource_definition["collection"]
+            collection = CLIENT[db_name][collection_name]
+            filter = resource_definition["filter"]
+            if verbs != "*" and "GET" not in verbs:
+                return make_response(jsonify({"code": "not-found"}), 404)
+
+            # Require the body to be json, and validate it.
+            if not request.is_json:
+                return make_response(jsonify({'code': 'format:unexpected'}), 400)
+            body = request.json
+            validator = self._resource_validators()
 
         @self.route('/<string:resource>/~<string:method>', methods=["GET"])
         @self._bearer_required

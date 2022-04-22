@@ -77,6 +77,21 @@ RESOURCE = {
         "type": "dict",
         "default_setter": lambda doc: {},
     },
+    "projection": {
+        # Intended for element and simple.
+        "anyof": [
+            {"type": "list"},
+            {"type": "dict"}
+        ]
+    },
+    "list_projection": {
+        # Intended for elements in list pages.
+        "dependencies": {"type": "list"},
+        "anyof": [
+            {"type": "list"},
+            {"type": "dict"}
+        ]
+    },
     "methods": {
         "type": "dict",
         "default_setter": lambda doc: {},

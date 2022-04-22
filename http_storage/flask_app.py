@@ -240,7 +240,7 @@ class StorageApp(Flask):
             else:
                 return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
 
-        @self.route("/<string:resource>/~<string:method>", methods=["GET"])
+        @self.route("/<string:resource>/~<string:method>", methods=["GET", "POST"])
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
@@ -250,23 +250,27 @@ class StorageApp(Flask):
             Intended for list-type resources and simple-type resources.
             Implementations should operate over {collection}.find() for
             list resources, and over {collection}.find_one() for simple
-            resources. The operation must be read-only.
+            resources. The operation must be read-only for GET verb.
             :return: Flask-compatible responses.
             """
 
-        @self.route("/<string:resource>/~<string:method>", methods=["POST"])
-        @self._capture_unexpected_errors
-        @self._using_resource
-        @self._bearer_required
-        def resource_operation(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                               collection: Collection, filter: dict, method: str):
-            """
-            Intended for list-type resources and simple-type resources.
-            Implementations should operate over {collection}.find() for
-            list resources, and over {collection}.find_one() for simple
-            resources. The operation can make changes.
-            :return: Flask-compatible responses.
-            """
+            try:
+                method_entry = resource_definition["methods"][method]
+                if request.method == "GET":
+                    if method_entry["type"] != "view":
+                        return make_response(jsonify({"code": "not-found"}), 404)
+                else:
+                    if method_entry["type"] != "operation":
+                        return make_response(jsonify({"code": "not-found"}), 404)
+
+            except KeyError:
+                return make_response(jsonify({"code": "not-found"}), 404)
+
+            # Getting the appropriate instance.
+            instance = method_entry["handler"]()
+
+            # Invoke the method
+            return instance(CLIENT, resource, method, db_name, collection_name, filter)
 
         @self.route("/<string:resource>", methods=["PUT"])
         @self._capture_unexpected_errors

@@ -161,6 +161,10 @@ RESOURCE = {
     "schema": {
         "type": "dict",
         "default_setter": lambda doc: {}
+    },
+    "soft_delete": {
+        "type": "boolean",
+        "default_setter": lambda doc: False
     }
 }
 schema_registry.add("http_storage.schemas.resource", RESOURCE)

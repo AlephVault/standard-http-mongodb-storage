@@ -1,5 +1,6 @@
 import functools
 from datetime import datetime
+from typing import Callable
 from bson import ObjectId
 from flask import Flask, make_response, request
 from flask.json import jsonify
@@ -21,11 +22,11 @@ class StorageApp(Flask):
     a way to interact with MongoDB.
     """
 
-    json_encoder = MongoDBEnhancedEncoder
-    validator_class = MongoDBEnhancedValidator
-    timestamp_with_splitseconds = False
+    json_encoder: type = MongoDBEnhancedEncoder
+    validator_class: type = MongoDBEnhancedValidator
+    timestamp_with_splitseconds: bool = False
 
-    def __init__(self, resources, validator_class=None, *args, **kwargs):
+    def __init__(self, resources: dict, validator_class: type = None, *args, **kwargs):
         """
         Checks a validator_class is properly configured, as well as the auth_db / auth_table.
 
@@ -53,13 +54,18 @@ class StorageApp(Flask):
 
         super().__init__(*args, **kwargs)
 
-    def _bearer_required(self, f):
+        # After everything is initialized, the endpoints must be registered.
+        # Those are standard resource endpoints.
+        self._register_endpoints()
+
+    def _bearer_required(self, f: Callable):
         """
         Requires a valid "Authorization: Bearer xxxxx..." header.
         :param f: The function to invoke.
         :return: The decorated function.
         """
 
+        @functools.wraps(f)
         def wrapper(*args, **kwargs):
             # Get the auth settings.
             auth_db = self._resources['auth']['db']
@@ -84,7 +90,7 @@ class StorageApp(Flask):
             return f(*args, **kwargs)
         return wrapper
 
-    def _schema_required(self, schema):
+    def _schema_required(self, schema: dict):
         """
         Returns a decorator, with a given schema, that wraps a function
         that requires a json body matching the given schema in order to
@@ -101,7 +107,7 @@ class StorageApp(Flask):
             return schema_decorator
 
         # Define and store the decorator, and return it.
-        def wrapper(f):
+        def wrapper(f: Callable):
             validator = self._validator_class(schema)
 
             # This is the function that will run the logic.
@@ -126,3 +132,166 @@ class StorageApp(Flask):
 
         self._schema_decorators[schema_id] = wrapper
         return wrapper
+
+    def _register_endpoints(self):
+        """
+        Registers all the needed endpoints for the resources.
+        """
+
+        # First, list-wise and simple-wise resource methods.
+
+        @self.route('/<string:resource>', methods=["GET"])
+        @self._bearer_required
+        def resource_read(resource: str):
+            """
+            Intended for list-type resources and simple-type resources.
+            List-type resources use a cursor and return a list.
+            Simple-type resources return a single element, or nothing / 404.
+            :param resource: The intended resource name.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>', methods=["POST"])
+        @self._bearer_required
+        def resource_create(resource: str):
+            """
+            Intended for list-type resources and simple-type resources.
+            List-type resources gladly accept new content (a single
+            new element from incoming body).
+            Simple-type resources only accept new content (a single
+            new element from incoming body as well) if no previous
+            content exists. Otherwise, they return conflict / 409.
+            :param resource: The intended resource name.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>/~<string:method>', methods=["GET"])
+        @self._bearer_required
+        def resource_view(resource: str, method: str):
+            """
+            Intended for list-type resources and simple-type resources.
+            Implementations should operate over {collection}.find() for
+            list resources, and over {collection}.find_one() for simple
+            resources. The operation must be read-only.
+            :param resource: The intended resource name.
+            :param method: The method to invoke.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>/~<string:method>', methods=["POST"])
+        @self._bearer_required
+        def resource_operation(resource: str, method: str):
+            """
+            Intended for list-type resources and simple-type resources.
+            Implementations should operate over {collection}.find() for
+            list resources, and over {collection}.find_one() for simple
+            resources. The operation can make changes.
+            :param resource: The intended resource name.
+            :param method: The method to invoke.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>', methods=["PUT"])
+        @self._bearer_required
+        def resource_read(resource: str):
+            """
+            Intended for simple-type resources. Replaces the element, if
+            it exists (otherwise, returns a 404 error) with a new one, from
+            the incoming json body.
+            :param resource: The intended resource name.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>', methods=["PATCH"])
+        @self._bearer_required
+        def resource_create(resource: str):
+            """
+            Intended for simple-type resources. Updates the element, if
+            it exists (otherwise, returns a 404 error) with new data from
+            the incoming json body.
+            :param resource: The intended resource name.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>', methods=["DELETE"])
+        @self._bearer_required
+        def resource_create(resource: str):
+            """
+            Intended for simple-type resources. Deletes the element, if
+            it exists (otherwise, returns a 404 error).
+            :param resource: The intended resource name.
+            :return: Flask-compatible responses.
+            """
+
+        # Second, element-wise resource methods.
+
+        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["GET"])
+        @self._bearer_required
+        def item_resource_read(resource: str, object_id: str):
+            """
+            Reads an element from a list, or returns nothing / 404.
+            :param resource: The intended resource name.
+            :param object_id: The element id.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["PUT"])
+        @self._bearer_required
+        def item_resource_replace(resource: str, object_id: str):
+            """
+            Replaces an element from a list, if it exists (or
+            returns nothing / 404) with a new one from the
+            incoming json body.
+            :param resource: The intended resource name.
+            :param object_id: The element id.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["PATCH"])
+        @self._bearer_required
+        def item_resource_update(resource: str, object_id: str):
+            """
+            Updates an element from a list, if it exists (or
+            returns nothing / 404) with new data from the
+            incoming json body.
+            :param resource: The intended resource name.
+            :param object_id: The element id.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>', methods=["DELETE"])
+        @self._bearer_required
+        def item_resource_delete(resource: str, object_id: str):
+            """
+            Deletes an element from a list, if it exists (or
+            returns nothing / 404).
+            :param resource: The intended resource name.
+            :param object_id: The element id.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>/~<string:method>', methods=["GET"])
+        @self._bearer_required
+        def item_resource_view(resource: str, object_id: str, method: str):
+            """
+            Implementation should operate over {collection}.find_one(
+                {"_id": ObjectId(object_id)}
+            ). This operation must be read-only.
+            :param resource: The intended resource name.
+            :param object_id: The element id.
+            :param method: The method to invoke.
+            :return: Flask-compatible responses.
+            """
+
+        @self.route('/<string:resource>/<regex("[a-f0-9]{24}"):object_id>/~<string:method>', methods=["POST"])
+        @self._bearer_required
+        def item_resource_operation(resource: str, object_id: str, method: str):
+            """
+            Implementation should operate over {collection}.find_one(
+                {"_id": ObjectId(object_id)}
+            ). This operation can make changes.
+            :param resource: The intended resource name.
+            :param object_id: The element id.
+            :param method: The method to invoke.
+            :return: Flask-compatible responses.
+            """

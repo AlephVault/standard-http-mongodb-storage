@@ -1,114 +1,18 @@
 import functools
-import typing as t
-from datetime import date, datetime
+from datetime import datetime
 from bson import ObjectId
-from cerberus import Validator, TypeDefinition
-from flask import Flask, current_app as app, make_response, request
-from flask.json import JSONEncoder, jsonify
+from flask import Flask, make_response, request
+from flask.json import jsonify
+from .core.json import MongoDBEnhancedEncoder
+from .core.validation import MongoDBEnhancedValidator
 from .engine.client import CLIENT
+from .engine.schemas import *
 
 
 class ImproperlyConfiguredError(Exception):
     """
     Raised when the storage app is misconfigured.
     """
-
-
-_DATETIME_FORMATS = [
-    "%Y-%m-%d %H:%M:%S.%f",
-    "%Y-%m-%dT%H:%M:%S.%f",
-    "%Y-%m-%d %H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S",
-]
-_DATE_FORMAT = "%Y-%m-%d"
-
-
-class MongoDBEnhancedEncoder(JSONEncoder):
-    """
-    This is an enhancement over a Flask's JSONEncoder but with
-    adding the encoding of an ObjectId to string, and custom
-    encodings for the date and datetime types.
-    """
-
-    def default(self, o: t.Any) -> t.Any:
-        if isinstance(o, ObjectId):
-            return str(o)
-        elif isinstance(o, datetime):
-            use_splitseconds = getattr(app, 'timestamp_with_splitseconds', False)
-            return o.strftime(_DATETIME_FORMATS[0] if use_splitseconds else _DATETIME_FORMATS[2])
-        elif isinstance(o, date):
-            return o.strftime(_DATE_FORMAT)
-        return super().default(o)
-
-
-class MongoDBEnhancedValidator(Validator):
-    """
-    This validator adds the following:
-    - Registering types: objectid.
-    - Default coercion of objectid using ObjectId.
-    - Default coercion of date and datetime using custom formats.
-    """
-
-    types_mapping = {
-        **Validator.types_mapping,
-        "objectid": TypeDefinition("objectid", (ObjectId,), ()),
-    }
-
-    def _normalize_coerce_str2date(self, value):
-        """
-        Coerces a date from a string in a %Y-%m-%d format.
-        :param value: The string value to coerce.
-        :return: The coerced date.
-        """
-
-        return datetime.strptime(value, _DATE_FORMAT).date()
-
-    def _normalize_coerce_str2datetime(self, value):
-        """
-        Coerces a datetime from a string in one of the available formats.
-        :param value: The string value to coerce.
-        :return: The coerced date.
-        """
-
-        for format in _DATETIME_FORMATS:
-            try:
-                return datetime.strptime(value, format)
-            except ValueError:
-                continue
-        raise ValueError(f"time data '{value}' does not match any of the available formats")
-
-    @classmethod
-    def apply_default_coercers(cls, schema, tracked=None):
-        """
-        In-place modifies a schema to add the default coercers to the input
-        documents before validation. This method should be called only once
-        per schema.
-        :param schema: The schema to in-place modify and add the coercers.
-        :param tracked: The already-tracked levels for this schema.
-        """
-
-        # Circular dependencies are ignored - they are already treated.
-        if tracked is None:
-            tracked = set()
-        schema_id = id(schema)
-        if schema_id in tracked:
-            return
-
-        if 'coerce' not in schema:
-            type_ = schema.get('type')
-            if type_ == "objectid":
-                schema['coerce'] = ObjectId
-            elif type_ == "date":
-                schema['coerce'] = 'str2date'
-            elif type_ == "datetime":
-                schema['coerce'] = 'str2datetime'
-        # We iterate over all the existing dictionaries to repeat this pattern.
-        # For this we also track the current schema, to avoid circular dependencies.
-        tracked.add(schema_id)
-        for sub_schema in schema.values():
-            if isinstance(sub_schema, dict):
-                cls.apply_default_coercers(sub_schema, tracked)
-        tracked.remove(schema_id)
 
 
 class StorageApp(Flask):
@@ -120,32 +24,32 @@ class StorageApp(Flask):
     json_encoder = MongoDBEnhancedEncoder
     validator_class = MongoDBEnhancedValidator
     timestamp_with_splitseconds = False
-    auth_db = None
-    auth_table = None
 
-    def __init__(self, auth_db=None, auth_table=None, validator_class=None, *args, **kwargs):
+    def __init__(self, resources, validator_class=None, *args, **kwargs):
         """
         Checks a validator_class is properly configured, as well as the auth_db / auth_table.
 
-        :param auth_db: The db, in mongo server, used for authentication.
-        :param auth_table: The table, in mongo server, used for authentication.
+        :param resources: The schema being used for this app.
         :param args: The flask-expected positional arguments.
         :param kwargs: The flask-expected keyword arguments.
         """
 
         # First, set the non-None arguments, overriding the per-class setup.
         self._validator_class = validator_class or self.validator_class
-        self._auth_db = auth_db or self.auth_db
-        self._auth_table = auth_table or self.auth_table
 
         # Also, set everything up to keep schema decorators.
         self._schema_decorators = {}
 
         # Then, validate them (regardless being instance or class arguments).
+        # Once the schema is validated, keep the normalized document for future
+        # uses (e.g. extract the auth db/collection from it, and later extract
+        # all the resources' metadata from it).
         if not (isinstance(self._validator_class, type) and issubclass(self._validator_class, MongoDBEnhancedValidator)):
             raise ImproperlyConfiguredError("Wrong or missing validator class")
-        if not (self._auth_db and self._auth_table):
-            raise ImproperlyConfiguredError("Wrong or missing auth_db / auth_table settings")
+        validator = self._validator_class("http_storage.schemas.settings")
+        if not validator.validate(resources):
+            raise ImproperlyConfiguredError(f"Validation errors on resource schema: {validator.errors}")
+        self._resources = validator.document
 
         super().__init__(*args, **kwargs)
 
@@ -158,8 +62,8 @@ class StorageApp(Flask):
 
         def wrapper(*args, **kwargs):
             # Get the auth settings.
-            auth_db = self._auth_db
-            auth_table = self._auth_table
+            auth_db = self._resources['auth']['db']
+            auth_table = self._resources['auth']['collection']
             # Get the header. It must be "bearer {token}".
             authorization = request.headers.get('Authorization')
             if not authorization:

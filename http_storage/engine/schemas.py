@@ -87,7 +87,8 @@ RESOURCE = {
     },
     "item-methods": {
         "type": "dict",
-        "default_setter": lambda doc: {},
+        # No default setter will be given here, since it collides
+        # with the dependency setting (breaks for "type": "simple").
         "dependencies": {"type": "list"},
         "keysrules": {
             "type": "string",

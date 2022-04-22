@@ -4,6 +4,7 @@ from typing import Callable
 from bson import ObjectId
 from flask import Flask, make_response, request
 from flask.json import jsonify
+from pymongo import ASCENDING, DESCENDING
 from .core.json import MongoDBEnhancedEncoder
 from .core.validation import MongoDBEnhancedValidator
 from .engine.client import CLIENT
@@ -14,6 +15,9 @@ class ImproperlyConfiguredError(Exception):
     """
     Raised when the storage app is misconfigured.
     """
+
+
+NOT_FOUND = {"code": "not-found"}, 404
 
 
 class StorageApp(Flask):
@@ -140,6 +144,30 @@ class StorageApp(Flask):
 
         # First, list-wise and simple-wise resource methods.
 
+        def _to_uint(value, minv=0):
+            try:
+                return max(minv, int(value))
+            except:
+                return minv
+
+        def _parse_order_by(value):
+            if not value:
+                value = []
+            elif isinstance(value, str):
+                value = value.split(',')
+
+            result = []
+            for element in value:
+                element = element.strip()
+                if not element:
+                    raise ValueError("Invalid order_by field: empty name")
+                direction = ASCENDING
+                if element[0] == '-':
+                    element = element[1:]
+                    direction = DESCENDING
+                result.append((element, direction))
+            return result
+
         @self.route('/<string:resource>', methods=["GET"])
         @self._bearer_required
         def resource_read(resource: str):
@@ -150,6 +178,42 @@ class StorageApp(Flask):
             :param resource: The intended resource name.
             :return: Flask-compatible responses.
             """
+
+            # First, get the resource definition.
+            resource_definition = self._resources.get(resource)
+            if not resource_definition:
+                return NOT_FOUND
+            verbs = resource_definition["verbs"]
+            db_name = resource_definition["db"]
+            collection_name = resource_definition["collection"]
+            collection = CLIENT[db_name][collection_name]
+            filter = resource_definition["filter"]
+            if verbs != "*" and "GET" not in verbs:
+                return NOT_FOUND
+
+            # Its "type" will be "list" or "simple".
+            if resource_definition["type"] == "list":
+                # Process a "list" resource.
+                offset = _to_uint(request.args.get("offset"))
+                limit = _to_uint(request.args.get("limit"), 1)
+                order_by = _parse_order_by(request.args.get("order_by", resource_definition.get("order_by")))
+
+                query = collection.find(filter=filter, projection=resource_definition.get("list_projection"))
+                if order_by:
+                    query = query.sort(order_by)
+                if offset:
+                    query = query.skip(offset)
+                if limit:
+                    query = query.limit(limit)
+
+                return jsonify(list(query)), 200
+            else:
+                # Process a "simple" resource.
+                element = collection.find_one(filter=filter, projection=resource_definition.get("projection"))
+                if element:
+                    return jsonify(element), 200
+                else:
+                    return NOT_FOUND
 
         @self.route('/<string:resource>', methods=["POST"])
         @self._bearer_required
@@ -295,3 +359,5 @@ class StorageApp(Flask):
             :param method: The method to invoke.
             :return: Flask-compatible responses.
             """
+
+# Results: {"code": "not-found"}, 404

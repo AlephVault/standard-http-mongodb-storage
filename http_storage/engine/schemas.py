@@ -84,6 +84,14 @@ RESOURCE = {
             {"type": "dict"}
         ]
     },
+    "order_by": {
+        "dependencies": {"type": "list"},
+        "type": "list",
+        "schema": {
+            "type": "string",
+            "regex": "-?[a-zA-Z][a-zA-Z0-9_-]+"
+        }
+    },
     "list_projection": {
         # Intended for elements in list pages.
         "dependencies": {"type": "list"},

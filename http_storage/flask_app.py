@@ -235,8 +235,12 @@ class StorageApp(Flask):
                 return make_response(jsonify({"code": "format:unexpected"}), 400)
             validator = self._resource_validators[resource]
             if validator.validate(request.json):
-                result = collection.insert_one(validator.document)
-                return make_response(jsonify({"id": result.inserted_id}), 201)
+                # Its "type" will be "list" or "simple".
+                if resource_definition["type"] != "list" and collection.find_one(filter):
+                    return make_response(jsonify({"code": "already-exists"}), 409)
+                else:
+                    result = collection.insert_one(validator.document)
+                    return make_response(jsonify({"id": result.inserted_id}), 201)
             else:
                 return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
 
@@ -276,27 +280,37 @@ class StorageApp(Flask):
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
-        def resource_read(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                          collection: Collection, filter: dict):
+        def resource_put(resource: str, resource_definition: dict, db_name: str, collection_name: str,
+                         collection: Collection, filter: dict):
             """
             Intended for simple-type resources. Replaces the element, if
             it exists (otherwise, returns a 404 error) with a new one, from
             the incoming json body.
-            :param resource: The intended resource name.
             :return: Flask-compatible responses.
             """
+
+            # Process a "simple" resource.
+            element = collection.find_one(filter=filter)
+            if element:
+                validator = self._resource_validators[resource]
+                if validator.validate(request.json):
+                    collection.replace_one(filter, validator.document, upsert=False)
+                    return make_response(jsonify({"code": "ok"}), 201)
+                else:
+                    return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
+            else:
+                return make_response(jsonify({"code": "not-found"}), 404)
 
         @self.route("/<string:resource>", methods=["PATCH"])
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
-        def resource_create(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                            collection: Collection, filter: dict):
+        def resource_patch(resource: str, resource_definition: dict, db_name: str, collection_name: str,
+                           collection: Collection, filter: dict):
             """
             Intended for simple-type resources. Updates the element, if
             it exists (otherwise, returns a 404 error) with new data from
             the incoming json body.
-            :param resource: The intended resource name.
             :return: Flask-compatible responses.
             """
 
@@ -304,7 +318,7 @@ class StorageApp(Flask):
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
-        def resource_create(resource: str, resource_definition: dict, db_name: str, collection_name: str,
+        def resource_delete(resource: str, resource_definition: dict, db_name: str, collection_name: str,
                             collection: Collection, filter: dict):
             """
             Intended for simple-type resources. Deletes the element, if

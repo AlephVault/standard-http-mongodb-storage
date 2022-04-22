@@ -282,8 +282,8 @@ class StorageApp(Flask):
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
-        def resource_put(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                         collection: Collection, filter: dict):
+        def resource_replace(resource: str, resource_definition: dict, db_name: str, collection_name: str,
+                             collection: Collection, filter: dict):
             """
             Intended for simple-type resources. Replaces the element, if
             it exists (otherwise, returns a 404 error) with a new one, from
@@ -307,8 +307,8 @@ class StorageApp(Flask):
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
-        def resource_patch(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                           collection: Collection, filter: dict):
+        def resource_update(resource: str, resource_definition: dict, db_name: str, collection_name: str,
+                            collection: Collection, filter: dict):
             """
             Intended for simple-type resources. Updates the element, if
             it exists (otherwise, returns a 404 error) with new data from
@@ -361,6 +361,14 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            # Process a "simple" resource.
+            element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)},
+                                          projection=resource_definition.get("projection"))
+            if element:
+                return make_response(jsonify(element), 200)
+            else:
+                return make_response(jsonify({"code": "not-found"}), 404)
+
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["PUT"])
         @self._capture_unexpected_errors
         @self._using_resource
@@ -373,6 +381,17 @@ class StorageApp(Flask):
             incoming json body.
             :return: Flask-compatible responses.
             """
+
+            element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
+            if element:
+                validator = self._resource_validators[resource]
+                if validator.validate(request.json):
+                    collection.replace_one(filter, validator.document, upsert=False)
+                    return make_response(jsonify({"code": "ok"}), 200)
+                else:
+                    return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
+            else:
+                return make_response(jsonify({"code": "not-found"}), 404)
 
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["PATCH"])
         @self._capture_unexpected_errors
@@ -387,6 +406,14 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
+            if element:
+                collection.update_one(filter, request.json, upsert=False)
+                return make_response(jsonify({"code": "ok"}), 200)
+            else:
+                return make_response(jsonify({"code": "not-found"}), 404)
+
+
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["DELETE"])
         @self._capture_unexpected_errors
         @self._using_resource
@@ -398,6 +425,20 @@ class StorageApp(Flask):
             returns nothing / 404).
             :return: Flask-compatible responses.
             """
+
+            filter = {**filter, "_id": ObjectId(object_id)}
+            if resource_definition["soft_delete"]:
+                result = collection.update_one(filter, {"$set": {"_deleted": True}}, upsert=False)
+                if result.modified_count:
+                    return make_response(jsonify({"code": "ok"}), 200)
+                else:
+                    return make_response(jsonify({"code": "not-found"}), 404)
+            else:
+                result = collection.delete_one(filter)
+                if result.deleted_count:
+                    return make_response(jsonify({"code": "ok"}), 200)
+                else:
+                    return make_response(jsonify({"code": "not-found"}), 404)
 
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>/~<string:method>", methods=["GET"])
         @self._capture_unexpected_errors

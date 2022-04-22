@@ -137,18 +137,22 @@ SETTINGS = {
         "schema": {
             "host": {
                 "type": "string",
+                "empty": False,
                 "default_setter": lambda doc: os.getenv('MONGODB_HOST', 'localhost')
             },
             "port": {
                 "type": "integer",
+                "empty": False,
                 "default_setter": lambda doc: int(os.getenv('MONGODB_PORT', '27017'))
             },
             "user": {
                 "type": "string",
+                "empty": False,
                 "default_setter": lambda doc: os.getenv('MONGODB_USER', '')
             },
             "password": {
                 "type": "string",
+                "empty": False,
                 "default_setter": lambda doc: os.getenv('MONGODB_PASSWORD', '')
             }
         }

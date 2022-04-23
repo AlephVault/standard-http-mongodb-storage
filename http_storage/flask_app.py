@@ -10,6 +10,8 @@ from flask import Flask, make_response, request
 from flask.json import jsonify
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
+
+from .core.converters import RegexConverter
 from .core.json import MongoDBEnhancedEncoder
 from .core.validation import MongoDBEnhancedValidator
 from .engine.schemas import *
@@ -35,7 +37,7 @@ class StorageApp(Flask):
     validator_class: type = MongoDBEnhancedValidator
     timestamp_with_splitseconds: bool = False
 
-    def __init__(self, settings: dict, validator_class: type = None, *args, **kwargs):
+    def __init__(self, settings: dict, *args, validator_class: type = None, **kwargs):
         """
         Checks a validator_class is properly configured, as well as the auth_db / auth_table.
 
@@ -74,6 +76,9 @@ class StorageApp(Flask):
 
         # Then, the base initialization must occur.
         super().__init__(*args, **kwargs)
+
+        # Adding the converter.
+        self.url_map.converters['regex'] = RegexConverter
 
         # After everything is initialized, the endpoints must be registered.
         # Those are standard resource endpoints.
@@ -136,6 +141,7 @@ class StorageApp(Flask):
           and returns a 500.
         """
 
+        @functools.wraps(f)
         def wrapper(*args, **kwargs):
             try:
                 return f(*args, **kwargs)

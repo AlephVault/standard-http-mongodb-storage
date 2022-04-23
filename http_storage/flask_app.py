@@ -18,6 +18,7 @@ from .engine.schemas import *
 
 
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.INFO)
 _PROJECTION_RX = re.compile(r"^-?([a-zA-Z][a-zA-Z0-9_-]+)(,[a-zA-Z][a-zA-Z0-9_-]+)*$")
 
 
@@ -170,7 +171,7 @@ class StorageApp(Flask):
             collection = self._client[db_name][collection_name]
             filter = resource_definition["filter"]
             if resource_definition["soft_delete"]:
-                filter = {**filter, "_deleted": False}
+                filter = {**filter, "_deleted": {"$ne": True}}
             if verbs != "*" and request.method not in verbs:
                 return make_response(jsonify({"code": "not-found"}), 404)
             return f(resource, resource_definition, db_name, collection_name, collection, filter, *args, **kwargs)

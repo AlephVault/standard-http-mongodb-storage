@@ -248,12 +248,10 @@ class StorageApp(Flask):
             Simple-type resources return a single element, or nothing / 404.
             """
 
-            # Get the projection to use.
-            projection = _parse_projection(request.args.get('projection') or resource_definition.get("list_projection"))
-
             # Its "type" will be "list" or "simple".
             if resource_definition["type"] == "list":
                 # Process a "list" resource.
+                projection = _parse_projection(request.args.get('projection') or resource_definition.get("list_projection"))
                 offset = _to_uint(request.args.get("offset"))
                 limit = _to_uint(request.args.get("limit"), 1)
                 order_by = _parse_order_by(request.args.get("order_by", resource_definition.get("order_by")))
@@ -269,6 +267,7 @@ class StorageApp(Flask):
                 return make_response(jsonify(list(query)), 200)
             else:
                 # Process a "simple" resource.
+                projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
                 element = collection.find_one(filter=filter, projection=projection)
                 if element:
                     return make_response(jsonify(element), 200)
@@ -420,6 +419,7 @@ class StorageApp(Flask):
             """
 
             # Process a "simple" resource.
+            LOGGER.info(f"Incoming projection is: {request.args.get('projection') or resource_definition.get('projection')}")
             projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)}, projection=projection)
             if element:

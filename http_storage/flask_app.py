@@ -4,14 +4,14 @@ import logging
 import functools
 from datetime import datetime
 from typing import Callable
+from urllib.parse import quote_plus
 from bson import ObjectId
 from flask import Flask, make_response, request
 from flask.json import jsonify
-from pymongo import ASCENDING, DESCENDING
+from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.collection import Collection
 from .core.json import MongoDBEnhancedEncoder
 from .core.validation import MongoDBEnhancedValidator
-from .engine.client import CLIENT
 from .engine.schemas import *
 
 
@@ -60,6 +60,7 @@ class StorageApp(Flask):
         if not validator.validate(settings):
             raise ImproperlyConfiguredError(f"Validation errors on resources DSL: {validator.errors}")
         self._settings = validator.document
+        self._client = self._build_client(self._settings["connection"])
         self._resource_validators = {}
         for key, resource in self._settings["resources"].items():
             schema = resource["schema"]
@@ -77,6 +78,22 @@ class StorageApp(Flask):
         # After everything is initialized, the endpoints must be registered.
         # Those are standard resource endpoints.
         self._register_endpoints()
+
+    def _build_client(self, connection):
+        """
+        Builds a client from the connection settings.
+        :param connection: The connection settings.
+        :return: The mongo client.
+        """
+
+        host = connection["host"].strip()
+        port = connection["port"].strip()
+        user = connection["user"].strip()
+        password = connection["password"]
+
+        if not user or not password:
+            raise ImproperlyConfiguredError("Missing MongoDB user or password")
+        return MongoClient("mongodb://%s:%s@%s:%s" % (quote_plus(user), quote_plus(password), host, port))
 
     def _bearer_required(self, f: Callable):
         """
@@ -102,8 +119,9 @@ class StorageApp(Flask):
             except ValueError:
                 return make_response(jsonify({"code": "authorization:syntax-error"}), 400)
             # Check the token.
-            token = CLIENT[auth_db][auth_table].find_one({"_id": ObjectId(token),
-                                                          "valid_until": {"$not": {"$lt": datetime.now()}}})
+            token = self._client[auth_db][auth_table].find_one({
+                "_id": ObjectId(token), "valid_until": {"$not": {"$lt": datetime.now()}}
+            })
             if not token:
                 return make_response(jsonify({"code": "authorization:not-found"}), 401)
             # If the validation passed, then we invoke the decorated function.
@@ -143,7 +161,7 @@ class StorageApp(Flask):
             verbs = resource_definition["verbs"]
             db_name = resource_definition["db"]
             collection_name = resource_definition["collection"]
-            collection = CLIENT[db_name][collection_name]
+            collection = self._client[db_name][collection_name]
             filter = resource_definition["filter"]
             if resource_definition["soft_delete"]:
                 filter = {**filter, "_deleted": False}
@@ -309,7 +327,7 @@ class StorageApp(Flask):
             instance = method_entry["handler"]()
 
             # Invoke the method
-            return instance(CLIENT, resource, method, db_name, collection_name, filter)
+            return instance(self._client, resource, method, db_name, collection_name, filter)
 
         @self.route("/<string:resource>", methods=["PUT"])
         @self._capture_unexpected_errors
@@ -501,4 +519,4 @@ class StorageApp(Flask):
             instance = method_entry["handler"]()
 
             # Invoke the method
-            return instance(CLIENT, resource, method, db_name, collection_name, filter, ObjectId(object_id))
+            return instance(self._client, resource, method, db_name, collection_name, filter, ObjectId(object_id))

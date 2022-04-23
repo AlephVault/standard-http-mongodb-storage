@@ -1,3 +1,5 @@
+import re
+import json
 import logging
 import functools
 from datetime import datetime
@@ -14,6 +16,7 @@ from .engine.schemas import *
 
 
 LOGGER = logging.getLogger(__name__)
+_PROJECTION_RX = re.compile(r"^-?([a-zA-Z][a-zA-Z0-9_-]+)(,[a-zA-Z][a-zA-Z0-9_-]+)*$")
 
 
 class ImproperlyConfiguredError(Exception):
@@ -180,6 +183,34 @@ class StorageApp(Flask):
                 result.append((element, direction))
             return result
 
+        def _parse_projection(projection):
+            if projection is None:
+                return None
+            elif isinstance(projection, (list, tuple, dict)):
+                return projection
+            elif isinstance(projection, str):
+                try:
+                    # 1. attempt json, and pass directly.
+                    return json.loads(projection)
+                except ValueError:
+                    # 2. attempt a csv format.
+                    if projection == "":
+                        raise TypeError("Invalid projection value")
+                    elif projection == "*":
+                        # Use full object.
+                        return None
+                    elif not _PROJECTION_RX.match(projection):
+                        raise TypeError("Invalid projection value")
+
+                    # Parse as a dictionary.
+                    include = True
+                    if projection[0] == "-":
+                        include = False
+                        projection = projection[1:]
+                    return {p: include for p in projection}
+            else:
+                raise TypeError("Invalid projection value")
+
         @self.route("/<string:resource>", methods=["GET"])
         @self._capture_unexpected_errors
         @self._using_resource
@@ -192,6 +223,9 @@ class StorageApp(Flask):
             Simple-type resources return a single element, or nothing / 404.
             """
 
+            # Get the projection to use.
+            projection = _parse_projection(request.args.get('projection') or resource_definition.get("list_projection"))
+
             # Its "type" will be "list" or "simple".
             if resource_definition["type"] == "list":
                 # Process a "list" resource.
@@ -199,7 +233,7 @@ class StorageApp(Flask):
                 limit = _to_uint(request.args.get("limit"), 1)
                 order_by = _parse_order_by(request.args.get("order_by", resource_definition.get("order_by")))
 
-                query = collection.find(filter=filter, projection=resource_definition.get("list_projection"))
+                query = collection.find(filter=filter, projection=projection)
                 if order_by:
                     query = query.sort(order_by)
                 if offset:
@@ -210,7 +244,7 @@ class StorageApp(Flask):
                 return make_response(jsonify(list(query)), 200)
             else:
                 # Process a "simple" resource.
-                element = collection.find_one(filter=filter, projection=resource_definition.get("projection"))
+                element = collection.find_one(filter=filter, projection=projection)
                 if element:
                     return make_response(jsonify(element), 200)
                 else:
@@ -361,8 +395,8 @@ class StorageApp(Flask):
             """
 
             # Process a "simple" resource.
-            element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)},
-                                          projection=resource_definition.get("projection"))
+            projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
+            element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)}, projection=projection)
             if element:
                 return make_response(jsonify(element), 200)
             else:

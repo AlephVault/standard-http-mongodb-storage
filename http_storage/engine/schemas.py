@@ -30,33 +30,6 @@ ITEM_METHOD = {
 schema_registry.add("http_storage.schemas.item-method", ITEM_METHOD)
 
 
-PARTIAL = {
-    "field_type": {
-        "type": "string",
-        "required": True,
-        "allowed": ["scalar", "list", "dict"]
-    },
-    "field_name": {
-        "type": "string",
-        "required": True,
-        "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
-    },
-    "children": {
-        "type": "dict",
-        # Default is None.
-        "valuesrules": {
-            "type": "dict",
-            "schema": "http_storage.schemas.partial",
-        },
-        "keysrules": {
-            "type": "string",
-            "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
-        }
-    }
-}
-schema_registry.add("http_storage.schemas.partial", PARTIAL)
-
-
 RESOURCE = {
     "type": {
         "type": "string",
@@ -145,18 +118,6 @@ RESOURCE = {
                 "allowed": ['create', 'read', 'replace', 'update', 'delete']
             }
         ]
-    },
-    "partials": {
-        "type": "dict",
-        "default_setter": lambda doc: {},
-        "valuesrules": {
-            "type": "dict",
-            "schema": "http_storage.schemas.partial",
-        },
-        "keysrules": {
-            "type": "string",
-            "regex": "[a-zA-Z][a-zA-Z0-9_-]+"
-        }
     },
     "schema": {
         "type": "dict",

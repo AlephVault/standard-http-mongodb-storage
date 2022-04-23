@@ -87,7 +87,7 @@ class StorageApp(Flask):
         """
 
         host = connection["host"].strip()
-        port = connection["port"].strip()
+        port = connection["port"]
         user = connection["user"].strip()
         password = connection["password"]
 

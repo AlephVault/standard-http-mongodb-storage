@@ -35,11 +35,11 @@ class StorageApp(Flask):
     validator_class: type = MongoDBEnhancedValidator
     timestamp_with_splitseconds: bool = False
 
-    def __init__(self, resources: dict, validator_class: type = None, *args, **kwargs):
+    def __init__(self, settings: dict, validator_class: type = None, *args, **kwargs):
         """
         Checks a validator_class is properly configured, as well as the auth_db / auth_table.
 
-        :param resources: The schema being used for this app.
+        :param settings: The schema being used for this app.
         :param args: The flask-expected positional arguments.
         :param kwargs: The flask-expected keyword arguments.
         """
@@ -57,11 +57,11 @@ class StorageApp(Flask):
         if not (isinstance(self._validator_class, type) and issubclass(self._validator_class, MongoDBEnhancedValidator)):
             raise ImproperlyConfiguredError("Wrong or missing validator class")
         validator = self._validator_class("http_storage.schemas.settings")
-        if not validator.validate(resources):
+        if not validator.validate(settings):
             raise ImproperlyConfiguredError(f"Validation errors on resources DSL: {validator.errors}")
-        self._resources = validator.document
+        self._settings = validator.document
         self._resource_validators = {}
-        for key, resource in self._resources.items():
+        for key, resource in self._settings["resources"].items():
             schema = resource["schema"]
             if not schema:
                 raise ImproperlyConfiguredError(f"Validation errors on resource schema for key '{key}': it is empty")
@@ -88,8 +88,8 @@ class StorageApp(Flask):
         @functools.wraps(f)
         def wrapper(*args, **kwargs):
             # Get the auth settings.
-            auth_db = self._resources["auth"]["db"]
-            auth_table = self._resources["auth"]["collection"]
+            auth_db = self._settings["auth"]["db"]
+            auth_table = self._settings["auth"]["collection"]
             # Get the header. It must be "bearer {token}".
             authorization = request.headers.get("Authorization")
             if not authorization:
@@ -137,7 +137,7 @@ class StorageApp(Flask):
 
         @functools.wraps(f)
         def new_handler(resource: str, *args, **kwargs):
-            resource_definition = self._resources.get(resource)
+            resource_definition = self._settings["resources"].get(resource)
             if not resource_definition:
                 return make_response(jsonify({"code": "not-found"}), 404)
             verbs = resource_definition["verbs"]

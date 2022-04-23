@@ -331,7 +331,7 @@ class StorageApp(Flask):
                 return make_response(jsonify({"code": "not-found"}), 404)
 
             # Getting the appropriate instance.
-            instance = method_entry["handler"]()
+            instance = method_entry["handler"]
 
             # Invoke the method
             return instance(self._client, resource, method, db_name, collection_name, filter)
@@ -523,7 +523,7 @@ class StorageApp(Flask):
                 return make_response(jsonify({"code": "not-found"}), 404)
 
             # Getting the appropriate instance.
-            instance = method_entry["handler"]()
+            instance = method_entry["handler"]
 
             # Invoke the method
             return instance(self._client, resource, method, db_name, collection_name, filter, ObjectId(object_id))

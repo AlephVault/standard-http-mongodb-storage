@@ -173,7 +173,7 @@ class StorageApp(Flask):
             if resource_definition["soft_delete"]:
                 filter = {**filter, "_deleted": {"$ne": True}}
             if verbs != "*" and request.method not in verbs:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return make_response(jsonify({"code": "method-not-allowed"}), 405)
             return f(resource, resource_definition, db_name, collection_name, collection, filter, *args, **kwargs)
         return new_handler
 

@@ -5,6 +5,8 @@ import functools
 from datetime import datetime
 from typing import Callable
 from urllib.parse import quote_plus
+
+import pymongo.errors
 from bson import ObjectId
 from flask import Flask, make_response, request
 from flask.json import jsonify
@@ -332,7 +334,10 @@ class StorageApp(Flask):
                 if resource_definition["type"] != "list" and collection.find_one(filter):
                     return make_response(jsonify({"code": "already-exists"}), 409)
                 else:
-                    result = collection.insert_one(validator.document)
+                    try:
+                        result = collection.insert_one(validator.document)
+                    except pymongo.errors.DuplicateKeyError as e:
+                        return make_response(jsonify({"code": "duplicate-key", "key": e.details["keyValue"]}), 409)
                     return make_response(jsonify({"id": result.inserted_id}), 201)
             else:
                 return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)

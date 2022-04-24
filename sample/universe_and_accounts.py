@@ -246,6 +246,12 @@ class SampleStorageApp(StorageApp):
                         "type": "operation",
                         "handler": SubItemsOneElement()
                     }
+                },
+                "indexes": {
+                    "unique-name": {
+                        "unique": True,
+                        "fields": "name"
+                    },
                 }
             }
         }

@@ -131,7 +131,7 @@ class StorageApp(Flask):
                 return make_response(jsonify({"code": "authorization:syntax-error"}), 400)
             # Check the token.
             token = self._client[auth_db][auth_table].find_one({
-                "_id": ObjectId(token), "valid_until": {"$not": {"$lt": datetime.now()}}
+                "api-key": token, "valid_until": {"$not": {"$lt": datetime.now()}}
             })
             if not token:
                 return make_response(jsonify({"code": "authorization:not-found"}), 401)
@@ -187,6 +187,12 @@ class StorageApp(Flask):
         Prepares the indices for each setup.
         """
 
+        # Prepare the indices for the auth table.
+        self._client[self._settings["auth"]["db"]][self._settings["auth"]["collection"]].create_index(
+            [("api-key", ASCENDING)], name="api-key", unique=True, background=False, sparse=True
+        )
+
+        # Prepare the indices for the resources.
         for key, resource in self._settings["resources"].items():
             indices = resource["indexes"]
             for name, index in indices.items():

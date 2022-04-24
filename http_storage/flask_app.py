@@ -4,17 +4,15 @@ import logging
 import functools
 from datetime import datetime
 from typing import Callable
-from urllib.parse import quote_plus
-
-import pymongo.errors
 from bson import ObjectId
-from flask import Flask, make_response, request
-from flask.json import jsonify
+from urllib.parse import quote_plus
+from flask import Flask, request
 from pymongo import ASCENDING, DESCENDING, MongoClient, GEOSPHERE, TEXT, HASHED
+from pymongo.errors import DuplicateKeyError
 from pymongo.collection import Collection
-
 from .core.converters import RegexConverter
 from .core.json import MongoDBEnhancedEncoder
+from .core.responses import *
 from .core.validation import MongoDBEnhancedValidator
 from .engine.schemas import *
 
@@ -121,20 +119,20 @@ class StorageApp(Flask):
             # Get the header. It must be "bearer {token}".
             authorization = request.headers.get("Authorization")
             if not authorization:
-                return make_response(jsonify({"code": "authorization:missing-header"}), 401)
+                return auth_missing()
             # Split it, and expect it to be "bearer".
             try:
                 scheme, token = authorization.split(" ")
                 if scheme.lower() != "bearer":
-                    return make_response(jsonify({"code": "authorization:bad-scheme"}), 400)
+                    return auth_bad_schema()
             except ValueError:
-                return make_response(jsonify({"code": "authorization:syntax-error"}), 400)
+                return auth_syntax_error()
             # Check the token.
             token = self._client[auth_db][auth_table].find_one({
                 "api-key": token, "valid_until": {"$not": {"$lt": datetime.now()}}
             })
             if not token:
-                return make_response(jsonify({"code": "authorization:not-found"}), 401)
+                return auth_not_found()
             # If the validation passed, then we invoke the decorated function.
             return f(*args, **kwargs)
         return wrapper
@@ -153,7 +151,7 @@ class StorageApp(Flask):
                 return f(*args, **kwargs)
             except:
                 LOGGER.exception("An exception was occurred (don't worry! it was wrapped into a 500 error)")
-                return jsonify({"code": "internal-error"}), 500
+                return internal_error()
         return wrapper
 
     def _using_resource(self, f: Callable):
@@ -169,7 +167,7 @@ class StorageApp(Flask):
         def new_handler(resource: str, *args, **kwargs):
             resource_definition = self._settings["resources"].get(resource)
             if not resource_definition:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
             verbs = resource_definition["verbs"]
             db_name = resource_definition["db"]
             collection_name = resource_definition["collection"]
@@ -178,7 +176,7 @@ class StorageApp(Flask):
             if resource_definition["soft_delete"]:
                 filter = {**filter, "_deleted": {"$ne": True}}
             if verbs != "*" and request.method not in verbs:
-                return make_response(jsonify({"code": "method-not-allowed"}), 405)
+                return method_not_allowed()
             return f(resource, resource_definition, db_name, collection_name, collection, filter, *args, **kwargs)
         return new_handler
 
@@ -305,15 +303,15 @@ class StorageApp(Flask):
                 if limit:
                     query = query.limit(limit)
 
-                return make_response(jsonify(list(query)), 200)
+                return ok(list(query))
             else:
                 # Process a "simple" resource.
                 projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
                 element = collection.find_one(filter=filter, projection=projection)
                 if element:
-                    return make_response(jsonify(element), 200)
+                    return ok(element)
                 else:
-                    return make_response(jsonify({"code": "not-found"}), 404)
+                    return not_found()
 
         @self.route("/<string:resource>", methods=["POST"])
         @self._capture_unexpected_errors
@@ -333,20 +331,20 @@ class StorageApp(Flask):
 
             # Require the body to be json, and validate it.
             if not request.is_json:
-                return make_response(jsonify({"code": "format:unexpected"}), 400)
+                return format_unexpected()
             validator = self._resource_validators[resource]
             if validator.validate(request.json):
                 # Its "type" will be "list" or "simple".
                 if resource_definition["type"] != "list" and collection.find_one(filter):
-                    return make_response(jsonify({"code": "already-exists"}), 409)
+                    return conflict_already_exists()
                 else:
                     try:
                         result = collection.insert_one(validator.document)
-                    except pymongo.errors.DuplicateKeyError as e:
-                        return make_response(jsonify({"code": "duplicate-key", "key": e.details["keyValue"]}), 409)
-                    return make_response(jsonify({"id": result.inserted_id}), 201)
+                    except DuplicateKeyError as e:
+                        return conflict_duplicate_key(e.details["keyValue"])
+                    return created(result.inserted_id)
             else:
-                return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
+                return format_invalid(validator.errors)
 
         @self.route("/<string:resource>/~<string:method>", methods=["GET", "POST"])
         @self._capture_unexpected_errors
@@ -366,12 +364,12 @@ class StorageApp(Flask):
                 method_entry = resource_definition["methods"][method]
                 if request.method == "GET":
                     if method_entry["type"] != "view":
-                        return make_response(jsonify({"code": "not-found"}), 404)
+                        return not_found()
                 else:
                     if method_entry["type"] != "operation":
-                        return make_response(jsonify({"code": "not-found"}), 404)
+                        return not_found()
             except KeyError:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
 
             # Getting the appropriate instance.
             instance = method_entry["handler"]
@@ -398,11 +396,11 @@ class StorageApp(Flask):
                 validator = self._resource_validators[resource]
                 if validator.validate(request.json):
                     collection.replace_one(filter, validator.document, upsert=False)
-                    return make_response(jsonify({"code": "ok"}), 200)
+                    return ok()
                 else:
-                    return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
+                    return format_invalid(validator.errors)
             else:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
 
         @self.route("/<string:resource>", methods=["PATCH"])
         @self._capture_unexpected_errors
@@ -420,9 +418,9 @@ class StorageApp(Flask):
             element = collection.find_one(filter=filter)
             if element:
                 collection.update_one(filter, request.json, upsert=False)
-                return make_response(jsonify({"code": "ok"}), 200)
+                return ok()
             else:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
 
         @self.route("/<string:resource>", methods=["DELETE"])
         @self._capture_unexpected_errors
@@ -439,15 +437,15 @@ class StorageApp(Flask):
             if resource_definition["soft_delete"]:
                 result = collection.update_one(filter, {"$set": {"_deleted": True}}, upsert=False)
                 if result.modified_count:
-                    return make_response(jsonify({"code": "ok"}), 200)
+                    return ok()
                 else:
-                    return make_response(jsonify({"code": "not-found"}), 404)
+                    return not_found()
             else:
                 result = collection.delete_one(filter)
                 if result.deleted_count:
-                    return make_response(jsonify({"code": "ok"}), 200)
+                    return ok()
                 else:
-                    return make_response(jsonify({"code": "not-found"}), 404)
+                    return not_found()
 
         # Second, element-wise resource methods.
 
@@ -467,9 +465,9 @@ class StorageApp(Flask):
             projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)}, projection=projection)
             if element:
-                return make_response(jsonify(element), 200)
+                return ok(element)
             else:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
 
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["PUT"])
         @self._capture_unexpected_errors
@@ -489,11 +487,11 @@ class StorageApp(Flask):
                 validator = self._resource_validators[resource]
                 if validator.validate(request.json):
                     collection.replace_one(filter, validator.document, upsert=False)
-                    return make_response(jsonify({"code": "ok"}), 200)
+                    return ok()
                 else:
-                    return make_response(jsonify({"code": "schema:invalid", "errors": validator.errors}), 400)
+                    return format_invalid(validator.errors)
             else:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
 
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["PATCH"])
         @self._capture_unexpected_errors
@@ -511,9 +509,9 @@ class StorageApp(Flask):
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
             if element:
                 collection.update_one(filter, request.json, upsert=False)
-                return make_response(jsonify({"code": "ok"}), 200)
+                return ok()
             else:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
 
 
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["DELETE"])
@@ -532,15 +530,15 @@ class StorageApp(Flask):
             if resource_definition["soft_delete"]:
                 result = collection.update_one(filter, {"$set": {"_deleted": True}}, upsert=False)
                 if result.modified_count:
-                    return make_response(jsonify({"code": "ok"}), 200)
+                    return ok()
                 else:
-                    return make_response(jsonify({"code": "not-found"}), 404)
+                    return not_found()
             else:
                 result = collection.delete_one(filter)
                 if result.deleted_count:
-                    return make_response(jsonify({"code": "ok"}), 200)
+                    return ok()
                 else:
-                    return make_response(jsonify({"code": "not-found"}), 404)
+                    return not_found()
 
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>/~<string:method>", methods=["GET", "POST"])
         @self._capture_unexpected_errors
@@ -559,12 +557,12 @@ class StorageApp(Flask):
                 method_entry = resource_definition["item_methods"][method]
                 if request.method == "GET":
                     if method_entry["type"] != "view":
-                        return make_response(jsonify({"code": "not-found"}), 404)
+                        return not_found()
                 else:
                     if method_entry["type"] != "operation":
-                        return make_response(jsonify({"code": "not-found"}), 404)
+                        return not_found()
             except KeyError:
-                return make_response(jsonify({"code": "not-found"}), 404)
+                return not_found()
 
             # Getting the appropriate instance.
             instance = method_entry["handler"]

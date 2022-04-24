@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='alephvault-http-mongodb-storage',
-    version='0.0.1',
+    version='0.0.2',
     packages=['http_storage', 'http_storage.core', 'http_storage.types', 'http_storage.engine'],
     url='https://github.com/AlephVault/http-mongodb-storage',
     license='MIT',

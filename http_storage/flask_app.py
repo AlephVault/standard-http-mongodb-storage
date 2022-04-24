@@ -284,6 +284,7 @@ class StorageApp(Flask):
             tmp.update_one({"_id": element["_id"]}, updates)
             element = tmp.find_one({"_id": element["_id"]})
             tmp.delete_one({"_id": element["_id"]})
+            element.pop("_id")
             return element
 
         @self.route("/<string:resource>", methods=["GET"])

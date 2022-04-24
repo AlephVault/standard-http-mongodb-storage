@@ -278,6 +278,14 @@ class StorageApp(Flask):
             else:
                 raise TypeError("Invalid projection value")
 
+        def _update_document(element, updates):
+            tmp = self._client["~tmp"]["updates"]
+            tmp.replace_one({"_id": element["_id"]}, element, upsert=True)
+            tmp.update_one({"_id": element["_id"]}, updates)
+            element = tmp.find_one({"_id": element["_id"]})
+            tmp.delete_one({"_id": element["_id"]})
+            return element
+
         @self.route("/<string:resource>", methods=["GET"])
         @self._capture_unexpected_errors
         @self._using_resource
@@ -427,9 +435,13 @@ class StorageApp(Flask):
                 return format_unexpected()
             element = collection.find_one(filter=filter)
             if element:
-                # TODO Fix the update logic, to validate errors.
-                collection.update_one(filter, request.json, upsert=False)
-                return ok()
+                element = _update_document(element, request.json)
+                validator = self._resource_validators[resource]
+                if validator.validate(element):
+                    collection.replace_one(filter, element, upsert=False)
+                    return ok()
+                else:
+                    return format_invalid(validator.errors)
             else:
                 return not_found()
 
@@ -520,10 +532,16 @@ class StorageApp(Flask):
 
             if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
-            element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
+            filter = {**filter, "_id": ObjectId(object_id)}
+            element = collection.find_one(filter=filter)
             if element:
-                collection.update_one(filter, request.json, upsert=False)
-                return ok()
+                element = _update_document(element, request.json)
+                validator = self._resource_validators[resource]
+                if validator.validate(element):
+                    collection.replace_one(filter, element, upsert=False)
+                    return ok()
+                else:
+                    return format_invalid(validator.errors)
             else:
                 return not_found()
 

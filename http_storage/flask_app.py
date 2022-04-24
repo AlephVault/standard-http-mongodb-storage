@@ -8,7 +8,7 @@ from urllib.parse import quote_plus
 from bson import ObjectId
 from flask import Flask, make_response, request
 from flask.json import jsonify
-from pymongo import ASCENDING, DESCENDING, MongoClient
+from pymongo import ASCENDING, DESCENDING, MongoClient, GEOSPHERE, TEXT, HASHED
 from pymongo.collection import Collection
 
 from .core.converters import RegexConverter
@@ -80,6 +80,9 @@ class StorageApp(Flask):
 
         # Adding the converter.
         self.url_map.converters['regex'] = RegexConverter
+
+        # Prepare the indices.
+        self._prepare_indexes()
 
         # After everything is initialized, the endpoints must be registered.
         # Those are standard resource endpoints.
@@ -176,6 +179,36 @@ class StorageApp(Flask):
                 return make_response(jsonify({"code": "method-not-allowed"}), 405)
             return f(resource, resource_definition, db_name, collection_name, collection, filter, *args, **kwargs)
         return new_handler
+
+    def _prepare_indexes(self):
+        """
+        Prepares the indices for each setup.
+        """
+
+        for key, resource in self._settings["resources"].items():
+            indices = resource["indexes"]
+            for name, index in indices.items():
+                unique = index["unique"]
+                fields = index["fields"]
+                if isinstance(fields, str):
+                    fields = [fields]
+                native_fields = []
+                for field in fields:
+                    type_ = ASCENDING
+                    if field[0] == "-":
+                        type_ = DESCENDING
+                    elif field[0] == "@":
+                        type_ = GEOSPHERE
+                    elif field[0] == "~":
+                        type_ = TEXT
+                    elif field[0] == "#":
+                        type_ = HASHED
+                    if type_ != ASCENDING:
+                        field = field[1:]
+                    native_fields.append((field, type_))
+                self._client[resource["db"]][resource["collection"]].create_index(native_fields, name=name,
+                                                                                  unique=unique, background=False,
+                                                                                  sparse=True)
 
     def _register_endpoints(self):
         """

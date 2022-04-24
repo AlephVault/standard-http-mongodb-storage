@@ -126,6 +126,41 @@ RESOURCE = {
     "soft_delete": {
         "type": "boolean",
         "default_setter": lambda doc: False
+    },
+    "indexes": {
+        "type": "dict",
+        "default_setter": lambda doc: {},
+        "keysrules": {
+            "type": "string",
+            "empty": False,
+            "regex": "[a-zA-Z][a-zA-Z0-9_-]+",
+        },
+        "valuesrules": {
+            "type": "dict",
+            "schema": {
+                "unique": {
+                    "type": "boolean",
+                    "default_setter": lambda doc: False
+                },
+                "fields": {
+                    "required": True,
+                    "anyof": [
+                        {
+                            "type": "string",
+                            "regex": "[#~@-]?[a-zA-Z][a-zA-Z0-9_-]+",
+                        },
+                        {
+                            "type": "list",
+                            "empty": False,
+                            "schema": {
+                                "type": "string",
+                                "regex": "[#~@-]?[a-zA-Z][a-zA-Z0-9_-]+",
+                            }
+                        }
+                    ]
+                }
+            }
+        }
     }
 }
 schema_registry.add("http_storage.schemas.resource", RESOURCE)

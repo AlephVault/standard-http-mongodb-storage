@@ -16,7 +16,6 @@ from .core.responses import *
 from .core.validation import MongoDBEnhancedValidator
 from .engine.schemas import *
 
-
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 _PROJECTION_RX = re.compile(r"^-?([a-zA-Z][a-zA-Z0-9_-]+)(,[a-zA-Z][a-zA-Z0-9_-]+)*$")
@@ -57,7 +56,8 @@ class StorageApp(Flask):
         # Once the schema is validated, keep the normalized document for future
         # uses (e.g. extract the auth db/collection from it, and later extract
         # all the resources" metadata from it).
-        if not (isinstance(self._validator_class, type) and issubclass(self._validator_class, MongoDBEnhancedValidator)):
+        if not (isinstance(self._validator_class, type) and issubclass(self._validator_class,
+                                                                       MongoDBEnhancedValidator)):
             raise ImproperlyConfiguredError("Wrong or missing validator class")
         validator = self._validator_class("http_storage.schemas.settings")
         if not validator.validate(settings):
@@ -135,6 +135,7 @@ class StorageApp(Flask):
                 return auth_not_found()
             # If the validation passed, then we invoke the decorated function.
             return f(*args, **kwargs)
+
         return wrapper
 
     def _capture_unexpected_errors(self, f: Callable):
@@ -152,6 +153,7 @@ class StorageApp(Flask):
             except:
                 LOGGER.exception("An exception was occurred (don't worry! it was wrapped into a 500 error)")
                 return internal_error()
+
         return wrapper
 
     def _using_resource(self, f: Callable):
@@ -178,6 +180,7 @@ class StorageApp(Flask):
             if verbs != "*" and request.method not in verbs:
                 return method_not_allowed()
             return f(resource, resource_definition, db_name, collection_name, collection, filter, *args, **kwargs)
+
         return new_handler
 
     def _prepare_indexes(self):
@@ -293,7 +296,9 @@ class StorageApp(Flask):
                 projection = _parse_projection(request.args.get('projection') or
                                                resource_definition.get("list_projection"))
                 offset = _to_uint(request.args.get("offset"))
-                limit = _to_uint(request.args.get("limit"), 1)
+                max_results = self._settings["global"].get("list_max_results") or \
+                    resource_definition.get("list_max_results")
+                limit = min(_to_uint(request.args.get("limit"), 1), max_results)
                 order_by = _parse_order_by(request.args.get("order_by", resource_definition.get("order_by")))
 
                 query = collection.find(filter=filter, projection=projection)
@@ -467,7 +472,6 @@ class StorageApp(Flask):
             """
 
             # Process a "simple" resource.
-            LOGGER.info(f"Incoming projection is: {request.args.get('projection') or resource_definition.get('projection')}")
             projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)}, projection=projection)
             if element:

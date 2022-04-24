@@ -2,6 +2,9 @@ import os
 from cerberus import schema_registry
 
 
+_MAX_RESULTS = 20
+
+
 METHOD = {
     "type": {
         "type": "string",
@@ -119,6 +122,11 @@ RESOURCE = {
             }
         ]
     },
+    "list_max_results": {
+        "type": "integer",
+        "default_setter": lambda doc: _MAX_RESULTS,
+        "min": 1
+    },
     "schema": {
         "type": "dict",
         "default_setter": lambda doc: {}
@@ -190,6 +198,16 @@ SETTINGS = {
                 "type": "string",
                 "empty": False,
                 "default_setter": lambda doc: os.getenv('MONGODB_PASSWORD', '')
+            }
+        }
+    },
+    "global": {
+        "type": "dict",
+        "default_setter": lambda doc: {},
+        "schema": {
+            "list_max_results": {
+                "type": "integer",
+                "min": 1
             }
         }
     },

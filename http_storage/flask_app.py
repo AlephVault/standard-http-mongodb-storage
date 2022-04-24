@@ -290,7 +290,8 @@ class StorageApp(Flask):
             # Its "type" will be "list" or "simple".
             if resource_definition["type"] == "list":
                 # Process a "list" resource.
-                projection = _parse_projection(request.args.get('projection') or resource_definition.get("list_projection"))
+                projection = _parse_projection(request.args.get('projection') or
+                                               resource_definition.get("list_projection"))
                 offset = _to_uint(request.args.get("offset"))
                 limit = _to_uint(request.args.get("limit"), 1)
                 order_by = _parse_order_by(request.args.get("order_by", resource_definition.get("order_by")))
@@ -330,7 +331,7 @@ class StorageApp(Flask):
             """
 
             # Require the body to be json, and validate it.
-            if not request.is_json:
+            if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
             validator = self._resource_validators[resource]
             if validator.validate(request.json):
@@ -390,6 +391,8 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not request.is_json or not isinstance(request.json, dict):
+                return format_unexpected()
             # Process a "simple" resource.
             element = collection.find_one(filter=filter)
             if element:
@@ -415,8 +418,11 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not request.is_json or not isinstance(request.json, dict):
+                return format_unexpected()
             element = collection.find_one(filter=filter)
             if element:
+                # TODO Fix the update logic, to validate errors.
                 collection.update_one(filter, request.json, upsert=False)
                 return ok()
             else:
@@ -482,6 +488,8 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not request.is_json or not isinstance(request.json, dict):
+                return format_unexpected()
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
             if element:
                 validator = self._resource_validators[resource]
@@ -506,13 +514,14 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not request.is_json or not isinstance(request.json, dict):
+                return format_unexpected()
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
             if element:
                 collection.update_one(filter, request.json, upsert=False)
                 return ok()
             else:
                 return not_found()
-
 
         @self.route("/<string:resource>/<regex('[a-f0-9]{24}'):object_id>", methods=["DELETE"])
         @self._capture_unexpected_errors

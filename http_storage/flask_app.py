@@ -348,6 +348,7 @@ class StorageApp(Flask):
             if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
             validator = self._resource_validators[resource]
+            request.json.pop('_id', None)
             if validator.validate(request.json):
                 # Its "type" will be "list" or "simple".
                 if resource_definition["type"] != "list" and collection.find_one(filter):
@@ -411,6 +412,7 @@ class StorageApp(Flask):
             element = collection.find_one(filter=filter)
             if element:
                 validator = self._resource_validators[resource]
+                request.json.pop('_id', None)
                 if validator.validate(request.json):
                     collection.replace_one(filter, validator.document, upsert=False)
                     return ok()
@@ -510,6 +512,7 @@ class StorageApp(Flask):
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
             if element:
                 validator = self._resource_validators[resource]
+                request.json.pop('_id', None)
                 if validator.validate(request.json):
                     collection.replace_one(filter, validator.document, upsert=False)
                     return ok()

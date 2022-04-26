@@ -259,6 +259,10 @@ class SampleStorageApp(StorageApp):
 
     def __init__(self, import_name: str = __name__):
         super().__init__(self.SETTINGS, import_name=import_name)
+        try:
+            self._client["auth-db"]["api-keys"].insert_one({"api-key": "abcdef"})
+        except:
+            pass
 
 
 if __name__ == "__main__":

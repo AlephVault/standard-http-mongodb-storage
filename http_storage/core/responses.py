@@ -30,6 +30,8 @@ def method_not_allowed():
 
 
 def ok(content=None):
+    if content is None:
+        content = {"code": "ok"}
     return make_response(jsonify(content or {"code": "ok"}), 200)
 
 

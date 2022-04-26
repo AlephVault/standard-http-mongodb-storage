@@ -414,7 +414,10 @@ class StorageApp(Flask):
                 validator = self._resource_validators[resource]
                 request.json.pop('_id', None)
                 if validator.validate(request.json):
-                    collection.replace_one(filter, validator.document, upsert=False)
+                    try:
+                        collection.replace_one(filter, validator.document, upsert=False)
+                    except DuplicateKeyError as e:
+                        return conflict_duplicate_key(e.details["keyValue"])
                     return ok()
                 else:
                     return format_invalid(validator.errors)
@@ -441,7 +444,10 @@ class StorageApp(Flask):
                 element = _update_document(element, request.json)
                 validator = self._resource_validators[resource]
                 if validator.validate(element):
-                    collection.replace_one(filter, element, upsert=False)
+                    try:
+                        collection.replace_one(filter, validator.document, upsert=False)
+                    except DuplicateKeyError as e:
+                        return conflict_duplicate_key(e.details["keyValue"])
                     return ok()
                 else:
                     return format_invalid(validator.errors)
@@ -514,7 +520,10 @@ class StorageApp(Flask):
                 validator = self._resource_validators[resource]
                 request.json.pop('_id', None)
                 if validator.validate(request.json):
-                    collection.replace_one(filter, validator.document, upsert=False)
+                    try:
+                        collection.replace_one(filter, validator.document, upsert=False)
+                    except DuplicateKeyError as e:
+                        return conflict_duplicate_key(e.details["keyValue"])
                     return ok()
                 else:
                     return format_invalid(validator.errors)
@@ -542,7 +551,10 @@ class StorageApp(Flask):
                 element = _update_document(element, request.json)
                 validator = self._resource_validators[resource]
                 if validator.validate(element):
-                    collection.replace_one(filter, element, upsert=False)
+                    try:
+                        collection.replace_one(filter, validator.document, upsert=False)
+                    except DuplicateKeyError as e:
+                        return conflict_duplicate_key(e.details["keyValue"])
                     return ok()
                 else:
                     return format_invalid(validator.errors)

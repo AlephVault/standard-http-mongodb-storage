@@ -219,7 +219,6 @@ class SampleStorageApp(StorageApp):
                 "type": "list",
                 "db": "mydb",
                 "collection": "accounts",
-                "soft_delete": True,
                 "schema": ACCOUNT,
                 "list_projection": ["address", "name"],
                 "verbs": "*",

@@ -175,6 +175,10 @@ schema_registry.add("http_storage.schemas.resource", RESOURCE)
 
 
 SETTINGS = {
+    "debug": {
+        "type": "boolean",
+        "default": False,
+    },
     "connection": {
         "type": "dict",
         "default_setter": lambda doc: {},

@@ -16,8 +16,7 @@ from .core.responses import *
 from .core.validation import MongoDBEnhancedValidator
 from .engine.schemas import *
 
-LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(logging.INFO)
+
 _PROJECTION_RX = re.compile(r"^-?([a-zA-Z][a-zA-Z0-9_-]+)(,[a-zA-Z][a-zA-Z0-9_-]+)*$")
 
 
@@ -37,7 +36,7 @@ class StorageApp(Flask):
     validator_class: type = MongoDBEnhancedValidator
     timestamp_with_splitseconds: bool = False
 
-    def __init__(self, settings: dict, *args, validator_class: type = None, **kwargs):
+    def __init__(self, settings: dict, import_name: str = None, *args, validator_class: type = None, **kwargs):
         """
         Checks a validator_class is properly configured, as well as the auth_db / auth_table.
 
@@ -76,7 +75,13 @@ class StorageApp(Flask):
                     raise ImproperlyConfiguredError(f"Validation errors on resource schema for key '{key}'")
 
         # Then, the base initialization must occur.
-        super().__init__(*args, **kwargs)
+        super().__init__(import_name, *args, **kwargs)
+
+        self._logger = logging.getLogger(self.import_name + ":logger")
+        if settings["debug"]:
+            self._logger.setLevel(logging.DEBUG)
+        else:
+            self._logger.setLevel(logging.INFO)
 
         # Adding the converter.
         self.url_map.converters['regex'] = RegexConverter
@@ -151,7 +156,7 @@ class StorageApp(Flask):
             try:
                 return f(*args, **kwargs)
             except:
-                LOGGER.exception("An exception was occurred (don't worry! it was wrapped into a 500 error)")
+                self._logger.exception("An exception was occurred (don't worry! it was wrapped into a 500 error)")
                 return internal_error()
 
         return wrapper
@@ -309,7 +314,7 @@ class StorageApp(Flask):
                     resource_definition.get("list_max_results")
                 limit = min(_to_uint(request.args.get("limit"), 1), max_results)
                 order_by = _parse_order_by(request.args.get("order_by", resource_definition.get("order_by")))
-
+                self._logger.debug(f"GET /{resource} (type=list), using filter={filter}")
                 query = collection.find(filter=filter, projection=projection)
                 if order_by:
                     query = query.sort(order_by)
@@ -321,6 +326,7 @@ class StorageApp(Flask):
                 return ok(list(query))
             else:
                 # Process a "simple" resource.
+                self._logger.debug(f"GET /{resource} (type=single), using filter={filter}")
                 projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
                 element = collection.find_one(filter=filter, projection=projection)
                 if element:
@@ -349,14 +355,19 @@ class StorageApp(Flask):
                 return format_unexpected()
             validator = self._resource_validators[resource]
             request.json.pop('_id', None)
+            self._logger.debug(f"POST /{resource} (type={resource_definition['type']}) "
+                               f"with body: {request.json}")
             if validator.validate(request.json):
                 # Its "type" will be "list" or "simple".
                 if resource_definition["type"] != "list" and collection.find_one(filter):
                     return conflict_already_exists()
                 else:
+                    self._logger.debug(f"POST /{resource} (type={resource_definition['type']}) "
+                                       f"with curated body: {validator.document}")
                     try:
                         result = collection.insert_one(validator.document)
                     except DuplicateKeyError as e:
+                        self._logger.debug(f"Duplicate key: {e.details}")
                         return conflict_duplicate_key(e.details["keyValue"])
                     return created(result.inserted_id)
             else:
@@ -413,8 +424,12 @@ class StorageApp(Flask):
             if element:
                 validator = self._resource_validators[resource]
                 request.json.pop('_id', None)
+                self._logger.debug(f"PUT /{resource} (type=simple) "
+                                   f"with body: {request.json}")
                 if validator.validate(request.json):
                     try:
+                        self._logger.debug(f"PUT /{resource} (type=simple) "
+                                           f"with curated body: {validator.document}")
                         collection.replace_one(filter, validator.document, upsert=False)
                     except DuplicateKeyError as e:
                         return conflict_duplicate_key(e.details["keyValue"])
@@ -441,10 +456,14 @@ class StorageApp(Flask):
                 return format_unexpected()
             element = collection.find_one(filter=filter)
             if element:
+                self._logger.debug(f"PATCH /{resource} (type=simple) "
+                                   f"with body: {request.json}")
                 element = _update_document(element, request.json)
                 validator = self._resource_validators[resource]
                 if validator.validate(element):
                     try:
+                        self._logger.debug(f"PATCH /{resource} (type=simple) "
+                                           f"with updated body: {validator.document}")
                         collection.replace_one(filter, validator.document, upsert=False)
                     except DuplicateKeyError as e:
                         return conflict_duplicate_key(e.details["keyValue"])
@@ -519,8 +538,12 @@ class StorageApp(Flask):
             if element:
                 validator = self._resource_validators[resource]
                 request.json.pop('_id', None)
+                self._logger.debug(f"PUT /{resource} (type=list) "
+                                   f"with body: {request.json}")
                 if validator.validate(request.json):
                     try:
+                        self._logger.debug(f"PUT /{resource} (type=list) "
+                                           f"with curated body: {request.json}")
                         collection.replace_one(filter, validator.document, upsert=False)
                     except DuplicateKeyError as e:
                         return conflict_duplicate_key(e.details["keyValue"])
@@ -550,8 +573,12 @@ class StorageApp(Flask):
             if element:
                 element = _update_document(element, request.json)
                 validator = self._resource_validators[resource]
+                self._logger.debug(f"PUT /{resource} (type=list) "
+                                   f"with body: {request.json}")
                 if validator.validate(element):
                     try:
+                        self._logger.debug(f"PUT /{resource} (type=list) "
+                                           f"with updated body: {validator.document}")
                         collection.replace_one(filter, validator.document, upsert=False)
                     except DuplicateKeyError as e:
                         return conflict_duplicate_key(e.details["keyValue"])

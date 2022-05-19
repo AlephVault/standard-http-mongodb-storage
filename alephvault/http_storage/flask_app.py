@@ -58,7 +58,7 @@ class StorageApp(Flask):
         if not (isinstance(self._validator_class, type) and issubclass(self._validator_class,
                                                                        MongoDBEnhancedValidator)):
             raise ImproperlyConfiguredError("Wrong or missing validator class")
-        validator = self._validator_class("http_storage.schemas.settings")
+        validator = self._validator_class("alephvault.http_storage.schemas.settings")
         if not validator.validate(settings):
             raise ImproperlyConfiguredError(f"Validation errors on resources DSL: {validator.errors}")
         self._settings = validator.document

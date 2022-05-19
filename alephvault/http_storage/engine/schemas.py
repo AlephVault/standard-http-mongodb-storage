@@ -16,7 +16,7 @@ METHOD = {
         "required": True
     }
 }
-schema_registry.add("http_storage.schemas.method", METHOD)
+schema_registry.add("alephvault.http_storage.schemas.method", METHOD)
 
 
 ITEM_METHOD = {
@@ -30,7 +30,7 @@ ITEM_METHOD = {
         "required": True
     }
 }
-schema_registry.add("http_storage.schemas.item-method", ITEM_METHOD)
+schema_registry.add("alephvault.http_storage.schemas.item-method", ITEM_METHOD)
 
 
 RESOURCE = {
@@ -85,7 +85,7 @@ RESOURCE = {
         },
         "valuesrules": {
             "type": "dict",
-            "schema": "http_storage.schemas.method",
+            "schema": "alephvault.http_storage.schemas.method",
         },
     },
     "item_methods": {
@@ -99,7 +99,7 @@ RESOURCE = {
         },
         "valuesrules": {
             "type": "dict",
-            "schema": "http_storage.schemas.item-method",
+            "schema": "alephvault.http_storage.schemas.item-method",
         },
     },
     "verbs": {
@@ -171,7 +171,7 @@ RESOURCE = {
         }
     }
 }
-schema_registry.add("http_storage.schemas.resource", RESOURCE)
+schema_registry.add("alephvault.http_storage.schemas.resource", RESOURCE)
 
 
 SETTINGS = {
@@ -222,7 +222,7 @@ SETTINGS = {
             "db": {
                 "type": "string",
                 "regex": "[a-zA-Z][a-zA-Z0-9_-]+",
-                "default_setter": lambda doc: os.getenv("APP_AUTH_DB", "http_storage")
+                "default_setter": lambda doc: os.getenv("APP_AUTH_DB", "alephvault_http_storage")
             },
             "collection": {
                 "type": "string",
@@ -236,7 +236,7 @@ SETTINGS = {
         "required": True,
         "valuesrules": {
             "type": "dict",
-            "schema": "http_storage.schemas.resource",
+            "schema": "alephvault.http_storage.schemas.resource",
         },
         "keysrules": {
             "type": "string",
@@ -244,4 +244,4 @@ SETTINGS = {
         }
     }
 }
-schema_registry.add("http_storage.schemas.settings", SETTINGS)
+schema_registry.add("alephvault.http_storage.schemas.settings", SETTINGS)

@@ -2,3 +2,6 @@
 .idea
 *.iml
 .tmp
+*.egg-info/
+/dist/
+/build/

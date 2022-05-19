@@ -312,7 +312,7 @@ class StorageApp(Flask):
                 offset = _to_uint(request.args.get("offset"))
                 max_results = self._settings["global"].get("list_max_results") or \
                     resource_definition.get("list_max_results")
-                limit = min(_to_uint(request.args.get("limit"), 1), max_results)
+                limit = min(_to_uint(request.args.get("limit", 20), 1), max_results)
                 order_by = _parse_order_by(request.args.get("order_by", resource_definition.get("order_by")))
                 self._logger.debug(f"GET /{resource} (type=list), using filter={filter}")
                 query = collection.find(filter=filter, projection=projection)

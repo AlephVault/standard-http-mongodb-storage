@@ -430,7 +430,7 @@ class StorageApp(Flask):
                     try:
                         self._logger.debug(f"PUT /{resource} (type=simple) "
                                            f"with curated body: {validator.document}")
-                        collection.replace_one(filter, validator.document, upsert=False)
+                        collection.replace_one({"_id": element["_id"], **filter}, validator.document, upsert=False)
                     except DuplicateKeyError as e:
                         return conflict_duplicate_key(e.details["keyValue"])
                     return ok()
@@ -464,7 +464,7 @@ class StorageApp(Flask):
                     try:
                         self._logger.debug(f"PATCH /{resource} (type=simple) "
                                            f"with updated body: {validator.document}")
-                        collection.replace_one(filter, validator.document, upsert=False)
+                        collection.replace_one({"_id": element["_id"], **filter}, validator.document, upsert=False)
                     except DuplicateKeyError as e:
                         return conflict_duplicate_key(e.details["keyValue"])
                     return ok()
@@ -534,7 +534,8 @@ class StorageApp(Flask):
 
             if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
-            element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)})
+            filter = {**filter, "_id": ObjectId(object_id)}
+            element = collection.find_one(filter=filter)
             if element:
                 validator = self._resource_validators[resource]
                 request.json.pop('_id', None)

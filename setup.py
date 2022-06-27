@@ -3,7 +3,7 @@ from setuptools import setup, find_namespace_packages
 
 setup(
     name='alephvault-http-mongodb-storage',
-    version='0.0.5',
+    version='0.0.6',
     packages=find_namespace_packages(),
     url='https://github.com/AlephVault/http-mongodb-storage',
     license='MIT',

@@ -78,7 +78,7 @@ class StorageApp(Flask):
         super().__init__(import_name, *args, **kwargs)
 
         self._logger = logging.getLogger(self.import_name + ":logger")
-        if settings["debug"]:
+        if self._settings["debug"]:
             self._logger.setLevel(logging.DEBUG)
         else:
             self._logger.setLevel(logging.INFO)

@@ -2,8 +2,8 @@ import logging
 from bson import ObjectId
 from flask import request, make_response, jsonify
 from pymongo import MongoClient
-from alephvault.http_storage import StorageApp
-from alephvault.http_storage import MethodHandler, ItemMethodHandler
+from alephvault.http_storage.flask_app import StorageApp
+from alephvault.http_storage.types.method_handlers import MethodHandler, ItemMethodHandler
 
 
 logging.basicConfig()

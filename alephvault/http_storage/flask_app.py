@@ -161,6 +161,17 @@ class StorageApp(Flask):
 
         return wrapper
 
+    def _expect_verb(self, resource_definition: dict, verb: str):
+        """
+        Checks whether a specific verb is allowed in a resource.
+        :param resource_definition: The resource definition.
+        :param verb: The verb to check.
+        :return: Whether the verb is allowed or not.
+        """
+
+        verbs = resource_definition["verbs"]
+        return verbs == "*" or verb not in verbs
+
     def _using_resource(self, f: Callable):
         """
         Wraps a handler to provide more data from the resource definition.
@@ -175,15 +186,12 @@ class StorageApp(Flask):
             resource_definition = self._settings["resources"].get(resource)
             if not resource_definition:
                 return not_found()
-            verbs = resource_definition["verbs"]
             db_name = resource_definition["db"]
             collection_name = resource_definition["collection"]
             collection = self._client[db_name][collection_name]
             filter = resource_definition["filter"]
             if resource_definition["soft_delete"]:
                 filter = {**filter, "_deleted": {"$ne": True}}
-            if verbs != "*" and request.method not in verbs:
-                return method_not_allowed()
             return f(resource, resource_definition, db_name, collection_name, collection, filter, *args, **kwargs)
 
         return new_handler
@@ -306,6 +314,9 @@ class StorageApp(Flask):
 
             # Its "type" will be "list" or "simple".
             if resource_definition["type"] == "list":
+                if not self._expect_verb(resource_definition, "list"):
+                    return method_not_allowed()
+
                 # Process a "list" resource.
                 projection = _parse_projection(request.args.get('projection') or
                                                resource_definition.get("list_projection"))
@@ -325,6 +336,9 @@ class StorageApp(Flask):
 
                 return ok(list(query))
             else:
+                if not self._expect_verb(resource_definition, "read"):
+                    return method_not_allowed()
+
                 # Process a "simple" resource.
                 self._logger.debug(f"GET /{resource} (type=single), using filter={filter}")
                 projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
@@ -349,6 +363,9 @@ class StorageApp(Flask):
             content exists. Otherwise, they return conflict / 409.
             :return: Flask-compatible responses.
             """
+
+            if not self._expect_verb(resource_definition, "create"):
+                return method_not_allowed()
 
             # Require the body to be json, and validate it.
             if not request.is_json or not isinstance(request.json, dict):
@@ -391,10 +408,10 @@ class StorageApp(Flask):
                 method_entry = resource_definition["methods"][method]
                 if request.method == "GET":
                     if method_entry["type"] != "view":
-                        return not_found()
+                        return method_not_allowed()
                 else:
                     if method_entry["type"] != "operation":
-                        return not_found()
+                        return method_not_allowed()
             except KeyError:
                 return not_found()
 
@@ -416,6 +433,9 @@ class StorageApp(Flask):
             the incoming json body.
             :return: Flask-compatible responses.
             """
+
+            if not self._expect_verb(resource_definition, "replace"):
+                return method_not_allowed()
 
             if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
@@ -452,10 +472,14 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not self._expect_verb(resource_definition, "update"):
+                return method_not_allowed()
+
             if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
             element = collection.find_one(filter=filter)
             if element:
+                _id = element["_id"]
                 self._logger.debug(f"PATCH /{resource} (type=simple) "
                                    f"with body: {request.json}")
                 element = _update_document(element, request.json)
@@ -464,7 +488,7 @@ class StorageApp(Flask):
                     try:
                         self._logger.debug(f"PATCH /{resource} (type=simple) "
                                            f"with updated body: {validator.document}")
-                        collection.replace_one({"_id": element["_id"], **filter}, validator.document, upsert=False)
+                        collection.replace_one({"_id": _id, **filter}, validator.document, upsert=False)
                     except DuplicateKeyError as e:
                         return conflict_duplicate_key(e.details["keyValue"])
                     return ok()
@@ -484,6 +508,9 @@ class StorageApp(Flask):
             it exists (otherwise, returns a 404 error).
             :return: Flask-compatible responses.
             """
+
+            if not self._expect_verb(resource_definition, "delete"):
+                return method_not_allowed()
 
             if resource_definition["soft_delete"]:
                 result = collection.update_one(filter, {"$set": {"_deleted": True}}, upsert=False)
@@ -511,6 +538,9 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not self._expect_verb(resource_definition, "read"):
+                return method_not_allowed()
+
             # Process a "simple" resource.
             projection = _parse_projection(request.args.get('projection') or resource_definition.get("projection"))
             element = collection.find_one(filter={**filter, "_id": ObjectId(object_id)}, projection=projection)
@@ -531,6 +561,9 @@ class StorageApp(Flask):
             incoming json body.
             :return: Flask-compatible responses.
             """
+
+            if not self._expect_verb(resource_definition, "replace"):
+                return method_not_allowed()
 
             if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
@@ -567,6 +600,9 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not self._expect_verb(resource_definition, "update"):
+                return method_not_allowed()
+
             if not request.is_json or not isinstance(request.json, dict):
                 return format_unexpected()
             filter = {**filter, "_id": ObjectId(object_id)}
@@ -601,6 +637,9 @@ class StorageApp(Flask):
             :return: Flask-compatible responses.
             """
 
+            if not self._expect_verb(resource_definition, "delete"):
+                return method_not_allowed()
+
             filter = {**filter, "_id": ObjectId(object_id)}
             if resource_definition["soft_delete"]:
                 result = collection.update_one(filter, {"$set": {"_deleted": True}}, upsert=False)
@@ -619,8 +658,8 @@ class StorageApp(Flask):
         @self._capture_unexpected_errors
         @self._using_resource
         @self._bearer_required
-        def item_resource_view(resource: str, resource_definition: dict, db_name: str, collection_name: str,
-                               collection: Collection, filter: dict, object_id: str, method: str):
+        def item_resource_method(resource: str, resource_definition: dict, db_name: str, collection_name: str,
+                                 collection: Collection, filter: dict, object_id: str, method: str):
             """
             Implementation should operate over {collection}.find_one(
                 {"_id": ObjectId(object_id)}
@@ -632,10 +671,10 @@ class StorageApp(Flask):
                 method_entry = resource_definition["item_methods"][method]
                 if request.method == "GET":
                     if method_entry["type"] != "view":
-                        return not_found()
+                        return method_not_allowed()
                 else:
                     if method_entry["type"] != "operation":
-                        return not_found()
+                        return method_not_allowed()
             except KeyError:
                 return not_found()
 
